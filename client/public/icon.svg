@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Resonate">
+  <rect width="512" height="512" rx="112" fill="#1d3a4d"/>
+  <circle cx="168" cy="256" r="26" fill="#f3f7f9"/>
+  <path d="M232 176a104 104 0 0 1 0 160" fill="none" stroke="#6cc0b6" stroke-width="30" stroke-linecap="round"/>
+  <path d="M296 128a168 168 0 0 1 0 256" fill="none" stroke="#6cc0b6" stroke-width="30" stroke-linecap="round" opacity="0.72"/>
+  <path d="M360 80a232 232 0 0 1 0 352" fill="none" stroke="#6cc0b6" stroke-width="30" stroke-linecap="round" opacity="0.46"/>
+</svg>

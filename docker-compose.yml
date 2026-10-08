@@ -1,0 +1,43 @@
+# Resonate behind Nginx Proxy Manager (or any TLS-terminating reverse proxy).
+# Do not publish this port to the internet directly: the session cookie is Secure-only,
+# so the app only works over HTTPS.
+services:
+  resonate:
+    image: ghcr.io/therebelrobot/resonate:latest
+    container_name: resonate
+    restart: unless-stopped
+    # Values interpolate from the shell or a .env file next to this file, so you can
+    # change them without editing this file (copy .env.example to .env). Each default
+    # matches what the server uses when the variable is unset.
+    environment:
+      RESONATE_TRUST_PROXY: "${RESONATE_TRUST_PROXY:-true}"
+      RESONATE_PUBLIC_ORIGIN: "${RESONATE_PUBLIC_ORIGIN:-https://voice.example.com}"
+      # Optional: choose the one-time setup token instead of reading it from the logs.
+      # Only consulted before the log exists; ignored once it has been set up.
+      RESONATE_SETUP_TOKEN: "${RESONATE_SETUP_TOKEN:-}"
+      RESONATE_SESSION_IDLE_MINUTES: "${RESONATE_SESSION_IDLE_MINUTES:-30}"
+      RESONATE_SESSION_MAX_HOURS: "${RESONATE_SESSION_MAX_HOURS:-12}"
+      # IANA zone used for the Date and Time columns in the server-side CSV export.
+      # Leave unset to use the container's own zone (UTC in the published image).
+      RESONATE_TIMEZONE: "${RESONATE_TIMEZONE:-}"
+    volumes:
+      - ./resonate-data:/app/data
+    # RESONATE_BIND_ADDRESS is the host interface the port is published on. The
+    # default 127.0.0.1 keeps it reachable only from this host (and a proxy running
+    # on it). Set it to 0.0.0.0 to expose the port on the LAN so a reverse proxy on
+    # another host can reach it - that also exposes it to every device on the
+    # network, so prefer the on-host proxy path for the public domain.
+    # RESONATE_HOST_PORT changes only the host side; the container always listens on
+    # 8788 (RESONATE_PORT is fixed in the image). Keep the target at 8788.
+    ports:
+      - "${RESONATE_BIND_ADDRESS:-127.0.0.1}:${RESONATE_HOST_PORT:-8788}:8788"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # The container runs as uid 1000 (node). If ./resonate-data is owned by another
+    # user on the host, chown it to 1000:1000 or set `user:` to match.
+    mem_limit: 512m
