@@ -210,6 +210,43 @@ The GitHub Actions workflows pin every action to a commit SHA. Those SHAs were c
 from a sibling project rather than re-resolved here; let Dependabot move them rather than
 trusting them.
 
+### Releases
+
+Merging to `main` releases. `.github/workflows/release.yml` reads the conventional-commit
+messages that landed since the last `v*` tag and takes the highest bump it finds:
+
+| Commit since the last tag | Bump |
+|---|---|
+| `!` after the type or scope (`fix(api)!:`), or a `BREAKING CHANGE:` footer | major |
+| `feat:` | minor |
+| `fix:`, `perf:` | patch |
+| `chore:`, `docs:`, `ci:`, `style:`, `test:`, `build:`, `refactor:` | none - no release |
+
+The job commits `chore: release vX.Y.Z`, tags it, and then calls
+`.github/workflows/publish.yml`, which verifies, pushes the multi-arch image to GHCR, and
+writes the GitHub Release with generated notes. Because that commit is pushed with
+`GITHUB_TOKEN`, it starts no further run, which is why the release workflow calls publish
+directly instead of relying on the tag push to trigger it.
+
+Image tags per release: `X.Y.Z`, `X.Y`, `sha-<short>`, and `latest`. `latest` follows the
+newest tag, so rebuilding an old tag republishes its own tags and leaves `latest` alone.
+
+To cut a release the commit messages do not imply - a major bump you are not ready to write
+`BREAKING CHANGE:` for, say - dispatch the workflow with the bump forced:
+
+```sh
+gh workflow run release.yml -f bump=major
+```
+
+The `npm run release:patch|minor|major` scripts still work - they bump, commit, and push a
+tag, and `publish.yml` picks the tag up - but the dispatch above is the better path: it goes
+through the same job that writes the GitHub Release.
+
+Branch protection is the one thing this workflow cannot work around: it pushes the release
+commit straight to `main`, so a ruleset requiring every change to arrive by pull request will
+reject it. Allow `github-actions[bot]` to bypass, or drop the commit step and tag the merge
+commit directly.
+
 ## Manual checks worth doing on a real phone
 
 Automated tests cover the crypto, the metrics, the CSV export, and the API; these depend on the
