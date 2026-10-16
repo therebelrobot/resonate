@@ -371,7 +371,7 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
   background: var(--paper);
 }
 .editor-bar-title { font-weight: 600; color: var(--ink-soft); }
-.step-track ol { list-style: none; padding: 4px 16px 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.step-track ol { list-style: none; padding: 4px 16px 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 .step-track-button { width: 100%; display: grid; gap: 6px; padding: 6px 0; background: none; border: 0; cursor: pointer; font: inherit; color: var(--ink-faint); }
 .step-track-bar { height: 5px; border-radius: 3px; background: var(--line); }
 .step-track-button[data-visited='true'] .step-track-bar { background: color-mix(in srgb, var(--ease) 55%, var(--line)); }
@@ -541,6 +541,16 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .screen-section { display: grid; gap: 12px; }
 .button-block { display: flex; width: 100%; }
 .card-stack { display: grid; gap: 12px; }
+/* Today's per-track progress cards. Without this they rendered with no surface
+   or padding at all (the class was referenced but never defined). */
+.card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+}
 .card-header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .card-figure { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .meter { position: relative; height: 10px; border-radius: 5px; background: var(--surface-sunken); overflow: hidden; }
@@ -550,7 +560,13 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 
 .track-card { display: grid; gap: 10px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); }
 .track-meta { font-size: 0.875rem; color: var(--ease); font-weight: 600; }
-.guidance-list { display: grid; gap: 6px; padding-left: 20px; list-style: disc; color: var(--ink-soft); max-width: 65ch; }
+.guidance-list { display: grid; gap: 6px; color: var(--ink-soft); max-width: 65ch; }
+/* The list marker is drawn by the ::before rule above; an ordered list gets real
+   numbers instead, so the marker is suppressed there. */
+ol.guidance-list { list-style: decimal; padding-left: 22px; }
+ol.guidance-list li { padding-left: 0; }
+ol.guidance-list li::before { content: none; }
+.guidance-list .guidance-list { margin-top: 6px; }
 .document-editor { display: grid; gap: 8px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); }
 .document-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 
@@ -573,7 +589,9 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .selection-list li { display: flex; gap: 10px; align-items: flex-start; font-size: 0.9375rem; }
 .selection-list input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--harbor); }
 .rating-table { border-collapse: collapse; width: 100%; max-width: 520px; font-variant-numeric: tabular-nums; }
-.rating-table th, .rating-table td { text-align: left; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.rating-table th, .rating-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.rating-table th:first-child, .rating-table td:first-child { padding-left: 0; }
+.rating-table th:last-child, .rating-table td:last-child { padding-right: 0; }
 .rating-table thead th { font-size: 0.8125rem; color: var(--ink-faint); font-weight: 600; }
 
 @media (min-width: 900px) {
@@ -582,15 +600,16 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 
 /* ---------- stretch and flow guided editor (spec 7.1, 8) ---------- */
 
-.sf-steps, .sf-cues, .sf-carryover, .sf-carryover-items {
+.sf-steps, .sf-cues, .sf-carryover, .sf-carryover-items, .pitch-fields, fieldset.field {
   display: grid;
   gap: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   padding: 12px 14px;
   margin: 0;
+  min-width: 0;
 }
-.sf-steps legend, .sf-cues legend, .sf-carryover legend, .sf-carryover-items legend {
+.sf-steps legend, .sf-cues legend, .sf-carryover legend, .sf-carryover-items legend, .pitch-fields legend, fieldset.field legend {
   font-weight: 600;
   font-size: 0.9375rem;
   color: var(--ink-soft);
