@@ -3,7 +3,12 @@ import { api } from '../api'
 import { useSessionData } from '../sessionData'
 import { formatFullTimestamp } from '../format'
 import {
+  CARRYOVER_CONTEXTS,
+  CARRYOVER_WEEKLY_CONVERSATION_TARGET,
   PRACTICE_TRACKS,
+  PROTOCOL_REFERENCES,
+  RESONANCE_SENTENCES,
+  RESONANCE_STEPS,
   SEGMENT_DEFINITIONS,
   SEGMENT_KINDS,
   SEGMENT_TRACK,
@@ -15,6 +20,7 @@ import {
   STRETCH_AND_FLOW_STAGES,
   STRETCH_AND_FLOW_STEPS,
   TRACK_DEFINITIONS,
+  VFE_PITCH_TARGETS,
   stretchAndFlowStepLabel,
 } from '../../shared/protocol'
 import { PROTOCOL_DOCUMENT_IDS, type ProtocolDocumentId } from '../../shared/model'
@@ -159,6 +165,72 @@ export function ProtocolScreen() {
             </details>
           )
         })}
+      </section>
+
+      <section className="detail-section">
+        <h2>Resonance Practice</h2>
+        <p className="field-hint">
+          From the notes. Warm up without voicing, then add it back one layer at a time until the sentences carry intonation.
+        </p>
+        <ol className="guidance-list">
+          {RESONANCE_STEPS.map((step) => (
+            <li key={step.id}>
+              <strong>{step.label}</strong> - {step.detail}
+            </li>
+          ))}
+        </ol>
+        <h3>Practice sentences</h3>
+        <ul className="guidance-list">
+          {RESONANCE_SENTENCES.map((sentence) => (
+            <li key={sentence.id}>{sentence.text}</li>
+          ))}
+        </ul>
+        <p className="field-hint">Add intonation and repeat as many times as you need for a more regular speech pattern.</p>
+      </section>
+
+      <section className="detail-section">
+        <h2>Carry-Over Practice</h2>
+        <p className="detail-text">
+          Think about your voice during {CARRYOVER_WEEKLY_CONVERSATION_TARGET} conversations a week. Schedule the practice and
+          include warm-up time beforehand.
+        </p>
+        <h3>Example contexts</h3>
+        <ul className="guidance-list">
+          {CARRYOVER_CONTEXTS.map((context) => (
+            <li key={context.id}>{context.text}</li>
+          ))}
+        </ul>
+        <p className="field-hint">Anything else you log is free text in the editor.</p>
+      </section>
+
+      <section className="detail-section">
+        <h2>Pitch targets</h2>
+        <p className="field-hint">The anchors the notes give for the glides and steps.</p>
+        <ul className="guidance-list">
+          {VFE_PITCH_TARGETS.map((target) => (
+            <li key={target.id}>
+              <strong>{target.label}</strong>: about {Math.round(target.hz)} Hz ({target.noteName})
+            </li>
+          ))}
+        </ul>
+        <p className="field-hint">
+          The ideal-speaking-range low note has no fixed target; the notes say to choose where you want it.
+        </p>
+      </section>
+
+      <section className="detail-section">
+        <h2>References</h2>
+        <p className="field-hint">Sent by your SLP. These open in a new tab.</p>
+        <ul className="guidance-list">
+          {PROTOCOL_REFERENCES.map((reference) => (
+            <li key={reference.id}>
+              <a href={reference.url} target="_blank" rel="noreferrer">
+                {reference.label}
+              </a>{' '}
+              - {reference.note}
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="detail-section">

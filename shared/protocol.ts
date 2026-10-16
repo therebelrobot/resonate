@@ -12,7 +12,7 @@
  * such rather than invented.
  */
 
-export const PRACTICE_TRACKS = ['vocalFunction', 'stretchAndFlow', 'endurance'] as const
+export const PRACTICE_TRACKS = ['vocalFunction', 'stretchAndFlow', 'resonance', 'carryover', 'endurance'] as const
 export type PracticeTrack = (typeof PRACTICE_TRACKS)[number]
 
 export const SEGMENT_KINDS = [
@@ -21,6 +21,8 @@ export const SEGMENT_KINDS = [
   'powerAscending',
   'powerDescending',
   'stretchAndFlow',
+  'resonance',
+  'carryover',
   'endurance',
 ] as const
 export type SegmentKind = (typeof SEGMENT_KINDS)[number]
@@ -32,6 +34,8 @@ export const SEGMENT_TRACK: Record<SegmentKind, PracticeTrack> = {
   powerAscending: 'vocalFunction',
   powerDescending: 'vocalFunction',
   stretchAndFlow: 'stretchAndFlow',
+  resonance: 'resonance',
+  carryover: 'carryover',
   endurance: 'endurance',
 }
 
@@ -61,6 +65,8 @@ export const SEGMENT_DEFINITIONS: Record<SegmentKind, SegmentDefinition> = {
       'Mostly slow and steady glides, that can be mountains or valleys.',
       'Vary the speed and the configuration.',
       'Try "ole" or "ooh". Humming or "eee" work too.',
+      'Start at about 350 Hz (F4), continue down the octave to about 175 Hz (F3).',
+      'Then pay attention to where you want your low note to sit in your ideal speaking range.',
       'Pay attention to where you shift registers.',
     ],
   },
@@ -73,6 +79,7 @@ export const SEGMENT_DEFINITIONS: Record<SegmentKind, SegmentDefinition> = {
       'Start at a low note and sustain for 5-8 seconds.',
       'Breathe between each step.',
       'Continue up your range and stop at a comfortable high note, 5-8 notes in.',
+      'The plan anchors this at about 350 Hz (F4) at the top and about 175 Hz (F3) an octave down.',
     ],
   },
   powerDescending: {
@@ -95,6 +102,29 @@ export const SEGMENT_DEFINITIONS: Record<SegmentKind, SegmentDefinition> = {
       'Each stage has its own voicing ratio and a five-step shape; the Stretch step shows them.',
       'Whatever stage you are on is the one to practice.',
       'Ask your SLP at the next session what moves you to the next phase.',
+    ],
+  },
+  resonance: {
+    kind: 'resonance',
+    label: 'Resonance practice',
+    summary: 'H-sounds, then vowels, humming, and sentences on a comfortable pitch.',
+    stepTitle: 'Resonance',
+    guidance: [
+      'Warm up by contrasting high and low resonance without vocal fold vibration ("h" sounds).',
+      'Use your pitch monitor to establish a comfortable pitch, then gently add phonation on vowel sounds.',
+      'Modify the vowels into humming sounds, then chant the sentences.',
+      'Add intonation to the sentences and repeat as many times as needed for a more regular speech pattern.',
+    ],
+  },
+  carryover: {
+    kind: 'carryover',
+    label: 'Carry-Over practice',
+    summary: 'Take the voice work into real conversations.',
+    stepTitle: 'Carry-Over',
+    guidance: [
+      'Think about your voice during two conversations a week.',
+      'Schedule the practice and include warm-up time beforehand.',
+      'Example from your SLP: peer programming.',
     ],
   },
   endurance: {
@@ -174,6 +204,47 @@ export const TRACK_DEFINITIONS: Record<PracticeTrack, TrackDefinition> = {
       'Start with Phase 1 (Air Only), then work through to Phase 4.',
       'Practice whichever stage you are on.',
       'Your SLP will say what moves you to the next stage.',
+    ],
+  },
+  resonance: {
+    track: 'resonance',
+    label: 'Resonance practice',
+    shortLabel: 'Resonance',
+    summary: 'H-sounds, vowels, humming, and intoned sentences on a comfortable pitch.',
+    sessionMinutesMinimum: 5,
+    sessionMinutesTarget: 10,
+    sessionMinutesMaximum: 15,
+    daysPerWeekMinimum: 5,
+    daysPerWeekMaximum: 7,
+    dayCountsAtMinutes: 5,
+    // The notes do not print a cadence for this practice; this borrows the VFE
+    // band and says so (ADR-0003, spec 4.4). Change it here when the SLP says.
+    cadenceNote: 'A starting point of 5-15 minutes, 5-7 days a week - the notes do not print a cadence, so confirm with your SLP.',
+    goalNote: null,
+    guidance: [
+      'Warm up by contrasting high and low resonance without vocal fold vibration ("h" sounds).',
+      'Use your pitch monitor to establish a comfortable pitch, then gently add phonation on vowel sounds.',
+      'Modify the vowels into humming sounds, then chant the sentences.',
+      'Add intonation to the sentences and repeat as many times as needed for a more regular speech pattern.',
+    ],
+  },
+  carryover: {
+    track: 'carryover',
+    label: 'Carry-Over practice',
+    shortLabel: 'Carry-over',
+    summary: 'Watch your voice during two conversations a week, with a warm-up beforehand.',
+    sessionMinutesMinimum: 5,
+    sessionMinutesTarget: 10,
+    sessionMinutesMaximum: 15,
+    daysPerWeekMinimum: 2,
+    daysPerWeekMaximum: 7,
+    dayCountsAtMinutes: 5,
+    cadenceNote: 'Two conversations a week, with warm-up time scheduled in.',
+    goalNote: 'The target is two conversations a week where you are thinking about your voice.',
+    guidance: [
+      'Think about your voice during two conversations a week.',
+      'Schedule the practice and include warm-up time beforehand.',
+      'Example from your SLP: peer programming.',
     ],
   },
   endurance: {
@@ -601,3 +672,131 @@ export function stretchAndFlowStageForPhaseNumber(phaseNumber: number | null): S
   if (phaseNumber === null) return undefined
   return STRETCH_AND_FLOW_STAGES.find((stage) => stage.phaseNumber === phaseNumber)
 }
+
+// ---------------------------------------------------------------------------
+// Resonance Practice and Carry-Over Practice, transcribed from the SLP notes
+// handed over 2026-10-15 (docs/specs/resonance-and-carryover.md, section 2).
+// Wording is preserved; anything the notes do not print is marked in that spec
+// and shown as a provisional default in TRACK_DEFINITIONS above.
+// ---------------------------------------------------------------------------
+
+export interface ResonanceStep {
+  id: string
+  label: string
+  detail: string
+}
+
+export const RESONANCE_STEPS: readonly ResonanceStep[] = [
+  {
+    id: 'contrastResonance',
+    label: 'Contrast high and low resonance, no voicing',
+    detail: 'Warm up by contrasting high and low resonance without vocal fold vibration ("h" sounds).',
+  },
+  {
+    id: 'pitchMonitorVowel',
+    label: 'Find a comfortable pitch, add phonation',
+    detail: 'Use your pitch monitor to establish a comfortable pitch, then gently add phonation on vowel sounds.',
+  },
+  { id: 'humming', label: 'Vowels to humming', detail: 'Modify the vowels into humming sounds.' },
+  { id: 'chantSentences', label: 'Chant sentences', detail: 'Chant the practice sentences on the comfortable pitch.' },
+  {
+    id: 'intonation',
+    label: 'Add intonation, repeat',
+    detail: 'Add intonation to the sentences and repeat as many times as needed for a more regular speech pattern.',
+  },
+]
+
+export interface ResonanceSentence {
+  id: string
+  text: string
+}
+
+export const RESONANCE_SENTENCES: readonly ResonanceSentence[] = [
+  { id: 'maryMadeMeMad', text: 'Mary made me mad' },
+  { id: 'motherMadeMarmalade', text: 'Mother made marmalade' },
+  { id: 'whoKnowsTheNews', text: 'Who knows the news' },
+  { id: 'williamWasWaiting', text: 'William was waiting' },
+  { id: 'whereWereWeWednesday', text: 'Where were we Wednesday' },
+]
+
+export interface CarryoverContext {
+  id: string
+  text: string
+}
+
+/** The note prints one example; anything else is free text in the editor. */
+export const CARRYOVER_CONTEXTS: readonly CarryoverContext[] = [{ id: 'peerProgramming', text: 'Peer programming' }]
+
+/** "two conversations/week" from the notes. */
+export const CARRYOVER_WEEKLY_CONVERSATION_TARGET = 2
+
+export interface PitchTarget {
+  id: string
+  label: string
+  noteName: string
+  hz: number
+}
+
+/**
+ * The two anchors from the notes: "start at ~350 Hz / F4, continue down the
+ * octave to ~175 / F3". The true equal-temperament frequencies are stored, not
+ * the rounded approximations. The ideal-speaking-range low note has no printed
+ * target and is not listed here (spec 2.4).
+ */
+export const VFE_PITCH_TARGETS: readonly PitchTarget[] = [
+  { id: 'startF4', label: 'Start', noteName: 'F4', hz: 349.23 },
+  { id: 'octaveDownF3', label: 'Down an octave', noteName: 'F3', hz: 174.61 },
+]
+
+export interface ProtocolReference {
+  id: string
+  label: string
+  url: string
+  note: string
+}
+
+export const PROTOCOL_REFERENCES: readonly ProtocolReference[] = [
+  {
+    id: 'acousticGenderSpace',
+    label: 'acousticgender.space',
+    url: 'https://acousticgender.space/',
+    note: 'A reference for exploring pitch and resonance, from your SLP.',
+  },
+  {
+    id: 'sumianVocalWeight',
+    label: 'Sumian Voice - Vocal weight',
+    url: 'https://wiki.sumianvoice.com/wiki/pages/vocal-weight/?st_source=ai_overview',
+    note: 'Starting to think about light vocal weight.',
+  },
+]
+
+/**
+ * Stable id tuples, for schema validation, kept in sync with the arrays by the
+ * protocol-integrity test (same pattern as the Stretch and Flow ids above).
+ */
+export const RESONANCE_STEP_IDS = [
+  'contrastResonance',
+  'pitchMonitorVowel',
+  'humming',
+  'chantSentences',
+  'intonation',
+] as const
+export const RESONANCE_SENTENCE_IDS = [
+  'maryMadeMeMad',
+  'motherMadeMarmalade',
+  'whoKnowsTheNews',
+  'williamWasWaiting',
+  'whereWereWeWednesday',
+] as const
+export const CARRYOVER_CONTEXT_IDS = ['peerProgramming'] as const
+
+/** Lookup helpers so the UI does not re-scan the arrays on every render. */
+export const RESONANCE_STEP_BY_ID: ReadonlyMap<string, ResonanceStep> = new Map(
+  RESONANCE_STEPS.map((step) => [step.id, step]),
+)
+export const RESONANCE_SENTENCE_BY_ID: ReadonlyMap<string, ResonanceSentence> = new Map(
+  RESONANCE_SENTENCES.map((sentence) => [sentence.id, sentence]),
+)
+export const CARRYOVER_CONTEXT_BY_ID: ReadonlyMap<string, CarryoverContext> = new Map(
+  CARRYOVER_CONTEXTS.map((context) => [context.id, context]),
+)

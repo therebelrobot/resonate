@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useSessionData } from '../sessionData'
 import { formatMinutes, formatTime } from '../format'
 import {
+  carryoverConversationsThisWeek,
   currentStretchAndFlowStage,
   currentStretchAndFlowStageKey,
   currentStretchAndFlowStageLabel,
@@ -9,11 +10,14 @@ import {
   minutesByTrack,
   practiceStreakDays,
   protocolHighlights,
+  RESONANCE_SENTENCE_COUNT,
   sessionTotalMinutes,
   trackProgress,
 } from '../../shared/metrics'
 import {
+  CARRYOVER_WEEKLY_CONVERSATION_TARGET,
   PRACTICE_TRACKS,
+  RESONANCE_STEP_BY_ID,
   SEGMENT_TRACK,
   STRETCH_AND_FLOW_CUES,
   TRACK_DEFINITIONS,
@@ -46,6 +50,7 @@ export function TodayScreen() {
   const currentStage = useMemo(() => currentStretchAndFlowStage(sessions), [sessions])
   const currentStageKey = useMemo(() => currentStretchAndFlowStageKey(sessions), [sessions])
   const currentStageLabel = useMemo(() => currentStretchAndFlowStageLabel(sessions), [sessions])
+  const conversationsThisWeek = useMemo(() => carryoverConversationsThisWeek(sessions, now), [sessions, now])
 
   if (isLoading) return <p className="screen-message">Opening your practice log...</p>
   if (loadError) return <p className="screen-message form-error">{loadError}</p>
@@ -90,6 +95,28 @@ export function TodayScreen() {
         )}
         <a className="link-button" href="#/protocol">
           Read the plan and add phase notes
+        </a>
+      </section>
+
+      <section className="screen-section">
+        <h2>Resonance and carry-over</h2>
+        <p className="helper">
+          Resonance:{' '}
+          {highlights.resonanceTopStepId
+            ? `you reached "${RESONANCE_STEP_BY_ID.get(highlights.resonanceTopStepId)?.label ?? highlights.resonanceTopStepId}" last time`
+            : 'nothing logged yet'}
+          {highlights.resonanceSentenceCount > 0
+            ? ` - ${highlights.resonanceSentenceCount} of ${RESONANCE_SENTENCE_COUNT} sentences practised.`
+            : '.'}
+        </p>
+        <p className="field-hint">
+          Carry-over: {conversationsThisWeek} of {CARRYOVER_WEEKLY_CONVERSATION_TARGET} conversations this week
+          {highlights.carryoverConversationTotal > 0
+            ? `, ${highlights.carryoverConversationTotal} logged in total.`
+            : '.'}
+        </p>
+        <a className="link-button" href="#/protocol">
+          Read the plan and add notes
         </a>
       </section>
 

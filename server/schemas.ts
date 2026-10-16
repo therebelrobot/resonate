@@ -7,7 +7,10 @@ import {
   TAG_KINDS,
 } from '../shared/model'
 import {
+  CARRYOVER_CONTEXT_IDS,
   MAX_STRETCH_AND_FLOW_PHASE,
+  RESONANCE_SENTENCE_IDS,
+  RESONANCE_STEP_IDS,
   SEGMENT_KINDS,
   SESSION_ROLES,
   STRETCH_AND_FLOW_CARRYOVER_IDS,
@@ -49,6 +52,31 @@ const stretchAndFlowDetailSchema = z.object({
   carryover: stretchAndFlowCarryoverLogSchema.nullable(),
 })
 
+const pitchWorkSchema = z.object({
+  highHz: z.number().int().min(0).max(2_000).nullable(),
+  lowHz: z.number().int().min(0).max(2_000).nullable(),
+  speakingRangeLowHz: z.number().int().min(0).max(2_000).nullable(),
+})
+
+const resonanceStepProgressSchema = z.object({
+  stepId: z.enum(RESONANCE_STEP_IDS),
+  completed: z.boolean(),
+})
+
+const resonanceDetailSchema = z.object({
+  steps: z.array(resonanceStepProgressSchema).max(10),
+  comfortablePitchHz: z.number().int().min(0).max(2_000).nullable(),
+  sentenceIds: z.array(z.enum(RESONANCE_SENTENCE_IDS)).max(20),
+  intonationRepetitions: z.number().int().min(0).max(100).nullable(),
+})
+
+const carryoverDetailSchema = z.object({
+  conversationCount: z.number().int().min(0).max(20).nullable(),
+  contextIds: z.array(z.enum(CARRYOVER_CONTEXT_IDS)).max(20),
+  customContext: z.string().max(2_000),
+  warmedUpBefore: z.boolean().nullable(),
+})
+
 export const sessionSegmentInputSchema = z
   .object({
     kind: z.enum(SEGMENT_KINDS),
@@ -69,6 +97,9 @@ export const sessionSegmentInputSchema = z
     // Optional so a stale client that predates the field is not rejected; the
     // route normalizes a missing key to null (spec 3.3). No `.default()` here.
     stretchAndFlow: stretchAndFlowDetailSchema.nullable().optional(),
+    pitch: pitchWorkSchema.nullable().optional(),
+    resonance: resonanceDetailSchema.nullable().optional(),
+    carryover: carryoverDetailSchema.nullable().optional(),
     paceRating: ratingSchema.nullable(),
     fatigueRating: ratingSchema.nullable(),
     tagIds: tagIdListSchema,

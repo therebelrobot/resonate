@@ -3,13 +3,18 @@ import { useSessionData } from '../sessionData'
 import { DailyMinutesChart, TrendLineChart } from '../components/charts'
 import { formatMinutes, formatPercent, formatRating, formatShortDate, formatSigned } from '../format'
 import {
+  carryoverConversationsThisWeek,
+  carryoverSummary,
   currentStretchAndFlowStage,
   currentStretchAndFlowStageLabel,
   dailyTrend,
   effortShiftSummary,
   glideShareSummary,
+  pitchRangeSummary,
   practiceStreakDays,
   protocolHighlights,
+  resonanceSummary,
+  RESONANCE_SENTENCE_COUNT,
   sessionTotalMinutes,
   stretchAndFlowBreathCountTrend,
   stretchAndFlowCarryoverCatalogSizeByKind,
@@ -22,6 +27,10 @@ import {
   trackProgress,
 } from '../../shared/metrics'
 import {
+  CARRYOVER_CONTEXTS,
+  CARRYOVER_WEEKLY_CONVERSATION_TARGET,
+  RESONANCE_SENTENCES,
+  RESONANCE_STEP_BY_ID,
   TRACK_DEFINITIONS,
   PRACTICE_TRACKS,
   STRETCH_AND_FLOW_CARRYOVER_KINDS,
@@ -29,10 +38,11 @@ import {
   STRETCH_AND_FLOW_CUES,
   STRETCH_AND_FLOW_RATIO_LABELS,
   STRETCH_AND_FLOW_RATIOS,
+  VFE_PITCH_TARGETS,
   stretchAndFlowStageLabel,
   type PracticeTrack,
 } from '../../shared/protocol'
-import { TAG_KIND_LABELS, type TagKind } from '../../shared/model'
+import { TAG_KIND_LABELS, noteNameForHz, type TagKind } from '../../shared/model'
 
 const TREND_DAYS = 14
 const ADHERENCE_DAYS = 28
@@ -58,6 +68,23 @@ export function InsightsScreen() {
   const carryoverProgress = useMemo(() => stretchAndFlowCarryoverProgress(sessions), [sessions])
   const breathTrend = useMemo(() => stretchAndFlowBreathCountTrend(sessions), [sessions])
   const carryoverCatalogSize = useMemo(() => stretchAndFlowCarryoverCatalogSizeByKind(), [])
+  const resonance = useMemo(() => resonanceSummary(sessions), [sessions])
+  const carryoverDetails = useMemo(() => carryoverSummary(sessions), [sessions])
+  const conversationsThisWeek = useMemo(() => carryoverConversationsThisWeek(sessions, now), [sessions, now])
+  const pitch = useMemo(() => pitchRangeSummary(sessions), [sessions])
+  const speakingRangeLowTrend = useMemo(
+    () =>
+      [...sessions]
+        .filter((session) => session.status === 'complete')
+        .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
+        .map((session) => {
+          const values = session.segments
+            .map((segment) => segment.pitch?.speakingRangeLowHz ?? null)
+            .filter((value): value is number => value !== null)
+          return values.length > 0 ? values[values.length - 1]! : null
+        }),
+    [sessions],
+  )
 
   const topTargets = useMemo(() => topTagsOfKind(sessions, 'focus', tagById, 6), [sessions, tagById])
   const topWins = useMemo(() => topTagsOfKind(sessions, 'win', tagById, 6), [sessions, tagById])
@@ -295,6 +322,104 @@ export function InsightsScreen() {
               <span className="tally-count">
                 {carryoverProgress.distinctByKind[kind]} of {carryoverCatalogSize[kind]}
               </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="detail-section">
+        <h2>Resonance</h2>
+        <p className="field-hint">The ladder from your SLP: h-sounds with no voicing, then vowels, humming, and intoned sentences.</p>
+        <div className="card-row">
+          <div className="stat-card">
+            <span className="stat-value">{formatMinutes(highlights.resonanceMinutes)}</span>
+            <span className="stat-label">total</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">
+              {resonance.sentenceIdsPractised.length}/{RESONANCE_SENTENCE_COUNT}
+            </span>
+            <span className="stat-label">sentences</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">
+              {resonance.averageComfortablePitchHz === null ? '-' : `${Math.round(resonance.averageComfortablePitchHz)} Hz`}
+            </span>
+            <span className="stat-label">avg pitch</span>
+          </div>
+        </div>
+        <p className="detail-text">
+          Ladder reached:{' '}
+          {resonance.latestTopStepId
+            ? RESONANCE_STEP_BY_ID.get(resonance.latestTopStepId)?.label ?? resonance.latestTopStepId
+            : 'no rungs recorded yet'}
+          . {resonance.totalIntonationRepetitions} intonation repetitions in total.
+        </p>
+        <ul className="tally-list">
+          {RESONANCE_SENTENCES.map((sentence) => (
+            <li key={sentence.id}>
+              <span>{sentence.text}</span>
+              <span className="tally-count">{resonance.sentenceIdsPractised.includes(sentence.id) ? 'practised' : 'not yet'}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="detail-section">
+        <h2>Pitch</h2>
+        <p className="field-hint">
+          The plan anchors: start at about {Math.round(VFE_PITCH_TARGETS[0]!.hz)} Hz ({VFE_PITCH_TARGETS[0]!.noteName}), down
+          the octave to about {Math.round(VFE_PITCH_TARGETS[1]!.hz)} Hz ({VFE_PITCH_TARGETS[1]!.noteName}).
+        </p>
+        <div className="card-row">
+          <div className="stat-card">
+            <span className="stat-value">{pitch.highestHz === null ? '-' : `${pitch.highestHz} Hz`}</span>
+            <span className="stat-label">{pitch.highestHz === null ? 'highest note' : `highest (${noteNameForHz(pitch.highestHz)})`}</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{pitch.lowestHz === null ? '-' : `${pitch.lowestHz} Hz`}</span>
+            <span className="stat-label">{pitch.lowestHz === null ? 'lowest note' : `lowest (${noteNameForHz(pitch.lowestHz)})`}</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">
+              {pitch.latestSpeakingRangeLowHz === null ? '-' : `${pitch.latestSpeakingRangeLowHz} Hz`}
+            </span>
+            <span className="stat-label">
+              {pitch.latestSpeakingRangeLowHz === null
+                ? 'speaking low'
+                : `speaking low (${noteNameForHz(pitch.latestSpeakingRangeLowHz)})`}
+            </span>
+          </div>
+        </div>
+        <TrendLineChart values={speakingRangeLowTrend} ariaLabel="Speaking-range low note per session, in Hz" />
+      </section>
+
+      <section className="detail-section">
+        <h2>Carry-over</h2>
+        <p className="field-hint">Thinking about your voice during real conversations - the plan asks for two a week.</p>
+        <div className="card-row">
+          <div className="stat-card">
+            <span className="stat-value">
+              {conversationsThisWeek}/{CARRYOVER_WEEKLY_CONVERSATION_TARGET}
+            </span>
+            <span className="stat-label">conversations this week</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{carryoverDetails.conversationTotal}</span>
+            <span className="stat-label">conversations total</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">
+              {carryoverDetails.warmedUpSessionCount}/{carryoverDetails.sessionCount}
+            </span>
+            <span className="stat-label">with a warm-up</span>
+          </div>
+        </div>
+        <ul className="tally-list">
+          {CARRYOVER_CONTEXTS.map((context) => (
+            <li key={context.id}>
+              <span>{context.text}</span>
+              <span className="tally-count">{carryoverDetails.contextIdsUsed.includes(context.id) ? 'used' : 'not yet'}</span>
             </li>
           ))}
         </ul>

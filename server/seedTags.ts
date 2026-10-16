@@ -13,6 +13,9 @@ export const DEFAULT_TAGS: readonly { kind: TagKind; name: string }[] = [
   { kind: 'focus', name: 'Register transition' },
   { kind: 'focus', name: 'Sustained phonation' },
   { kind: 'focus', name: 'Resonance' },
+  { kind: 'focus', name: 'Resonance placement' },
+  { kind: 'focus', name: 'Light vocal weight' },
+  { kind: 'focus', name: 'Intonation' },
   { kind: 'focus', name: 'Volume control' },
   { kind: 'focus', name: 'Pitch range' },
   { kind: 'focus', name: 'Articulation' },
@@ -53,6 +56,7 @@ export const DEFAULT_TAGS: readonly { kind: TagKind; name: string }[] = [
   { kind: 'utterance', name: 'Ooh' },
   { kind: 'utterance', name: 'Ole' },
   { kind: 'utterance', name: 'Hum' },
+  { kind: 'utterance', name: 'H sounds' },
   { kind: 'utterance', name: 'Sustained vowel' },
   { kind: 'utterance', name: 'Speech' },
 

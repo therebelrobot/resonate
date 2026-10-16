@@ -293,6 +293,49 @@ describe('sessions', () => {
     assert.deepEqual(stretch.stretchAndFlow?.carryover?.itemIds, ['free'])
   })
 
+  it('round-trips pitch, resonance, and carryover details', async () => {
+    const { server } = await setUpServer()
+    const payload = sessionInput([]) as unknown as { segments: Record<string, unknown>[] }
+    payload.segments[1] = {
+      ...payload.segments[1],
+      kind: 'resonance',
+      pitch: { highHz: 350, lowHz: 175, speakingRangeLowHz: 165 },
+      resonance: {
+        steps: [{ stepId: 'contrastResonance', completed: true }],
+        comfortablePitchHz: 180,
+        sentenceIds: ['maryMadeMeMad'],
+        intonationRepetitions: 3,
+      },
+      carryover: { conversationCount: 2, contextIds: ['peerProgramming'], customContext: '', warmedUpBefore: true },
+    }
+    const response = await server.request('POST', '/api/sessions', payload)
+    assert.equal(response.status, 201)
+    const created = await readJson<Session>(response)
+    const resonance = created.segments.find((segment) => segment.kind === 'resonance')
+    assert.ok(resonance)
+    assert.equal(resonance.pitch?.highHz, 350)
+    assert.equal(resonance.resonance?.comfortablePitchHz, 180)
+    assert.deepEqual(resonance.resonance?.sentenceIds, ['maryMadeMeMad'])
+    assert.equal(resonance.carryover?.conversationCount, 2)
+    assert.deepEqual(resonance.carryover?.contextIds, ['peerProgramming'])
+  })
+
+  it('rejects a resonance detail with an unknown step id', async () => {
+    const { server } = await setUpServer()
+    const payload = sessionInput([]) as unknown as { segments: Record<string, unknown>[] }
+    payload.segments[1] = {
+      ...payload.segments[1],
+      kind: 'resonance',
+      resonance: {
+        steps: [{ stepId: 'singSong', completed: true }],
+        comfortablePitchHz: null,
+        sentenceIds: [],
+        intonationRepetitions: null,
+      },
+    }
+    assert.equal((await server.request('POST', '/api/sessions', payload)).status, 400)
+  })
+
   it('rejects a Stretch and Flow detail with an unknown ratio', async () => {
     const { server } = await setUpServer()
     const payload = sessionInput([]) as unknown as { segments: Record<string, unknown>[] }
@@ -317,6 +360,9 @@ describe('sessions', () => {
     const payload = sessionInput([]) as unknown as { segments: Record<string, unknown>[] }
     const legacySegment = { ...payload.segments[1] }
     delete legacySegment.stretchAndFlow
+    delete legacySegment.pitch
+    delete legacySegment.resonance
+    delete legacySegment.carryover
     payload.segments[1] = legacySegment
     const response = await server.request('POST', '/api/sessions', payload)
     assert.equal(response.status, 201)
@@ -324,6 +370,9 @@ describe('sessions', () => {
     const glides = created.segments.find((segment) => segment.kind === 'glides')
     assert.ok(glides)
     assert.equal(glides.stretchAndFlow, null)
+    assert.equal(glides.pitch, null)
+    assert.equal(glides.resonance, null)
+    assert.equal(glides.carryover, null)
   })
 
   it('accepts a stored phase number above the canonical set', async () => {

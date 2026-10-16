@@ -3,6 +3,8 @@ import { minutesByTrack } from '../shared/metrics'
 import { GLIDE_PACE_LABELS, SESSION_ROLE_LABELS } from '../shared/model'
 import type { Session, SessionSegmentInput, Tag, TagKind } from '../shared/model'
 import {
+  CARRYOVER_CONTEXT_BY_ID,
+  RESONANCE_SENTENCE_BY_ID,
   SEGMENT_DEFINITIONS,
   STRETCH_AND_FLOW_CARRYOVER_BY_ID,
   STRETCH_AND_FLOW_CARRYOVER_KIND_LABELS,
@@ -69,6 +71,20 @@ const CSV_COLUMNS: readonly string[] = [
   'Cues Checked',
   'Carryover Kind',
   'Carryover Items',
+  // Resonance, Carry-Over, and pitch columns, appended after every existing
+  // column (spec 7.6). As above, existing columns keep their positions.
+  'Pitch High (Hz)',
+  'Pitch Low (Hz)',
+  'Speaking Range Low (Hz)',
+  'Resonance Steps',
+  'Resonance Sentences',
+  'Comfortable Pitch (Hz)',
+  'Intonation Repetitions',
+  'Carryover Conversations',
+  'Carryover Contexts',
+  'Warmed Up Before',
+  'Resonance Minutes',
+  'Carryover Minutes',
 ]
 
 const PART_COLUMN_COUNT = 20
@@ -99,6 +115,44 @@ function stretchAndFlowColumns(segment: SessionSegmentInput): string[] {
     detail.carryover?.kind ? STRETCH_AND_FLOW_CARRYOVER_KIND_LABELS[detail.carryover.kind] : '',
     carryoverItems,
   ]
+}
+
+/** The ten appended pitch/resonance/carry-over part columns, blank for other kinds. */
+function pitchResonanceCarryoverColumns(segment: SessionSegmentInput): string[] {
+  const pitch = segment.pitch
+  const resonance = segment.resonance
+  const carryoverDetail = segment.carryover
+  const rungs =
+    resonance && resonance.steps.length > 0
+      ? `${resonance.steps.filter((step) => step.completed).length}/${resonance.steps.length}`
+      : ''
+  const sentences = (resonance?.sentenceIds ?? [])
+    .map((sentenceId) => RESONANCE_SENTENCE_BY_ID.get(sentenceId)?.text ?? sentenceId)
+    .join('; ')
+  const contexts = (carryoverDetail?.contextIds ?? [])
+    .map((contextId) => CARRYOVER_CONTEXT_BY_ID.get(contextId)?.text ?? contextId)
+    .join('; ')
+  return [
+    formatNumber(pitch?.highHz ?? null),
+    formatNumber(pitch?.lowHz ?? null),
+    formatNumber(pitch?.speakingRangeLowHz ?? null),
+    rungs,
+    sentences,
+    formatNumber(resonance?.comfortablePitchHz ?? null),
+    formatNumber(resonance?.intonationRepetitions ?? null),
+    formatNumber(carryoverDetail?.conversationCount ?? null),
+    contexts,
+    carryoverDetail?.warmedUpBefore === null || carryoverDetail?.warmedUpBefore === undefined
+      ? ''
+      : carryoverDetail.warmedUpBefore
+        ? 'Yes'
+        : 'No',
+  ]
+}
+
+/** The two appended session-level track-minute columns. */
+function resonanceCarryoverMinutesColumns(trackMinutes: ReturnType<typeof minutesByTrack>): string[] {
+  return [formatNumber(trackMinutes.resonance, 1), formatNumber(trackMinutes.carryover, 1)]
 }
 
 export function buildSessionsCsv(sessions: readonly Session[], tags: readonly Tag[], timeZone: string): string {
@@ -167,6 +221,8 @@ export function buildSessionsCsv(sessions: readonly Session[], tags: readonly Ta
         ...Array.from({ length: PART_COLUMN_COUNT }, () => ''),
         ...aggregateColumns,
         ...Array.from({ length: 8 }, () => ''),
+        ...Array.from({ length: 10 }, () => ''),
+        ...resonanceCarryoverMinutesColumns(trackMinutes),
       ])
       continue
     }
@@ -176,6 +232,8 @@ export function buildSessionsCsv(sessions: readonly Session[], tags: readonly Ta
         ...buildPartColumns(segment),
         ...aggregateColumns,
         ...stretchAndFlowColumns(segment),
+        ...pitchResonanceCarryoverColumns(segment),
+        ...resonanceCarryoverMinutesColumns(trackMinutes),
       ])
     }
   }

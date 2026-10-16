@@ -10,11 +10,18 @@ import {
   GLIDE_PACE_LABELS,
   SESSION_ROLE_LABELS,
   SESSION_ROLES,
+  createEmptyCarryoverDetail,
+  createEmptyPitchWork,
+  createEmptyResonanceDetail,
   createEmptySegmentInput,
   createEmptySessionInput,
   createEmptyStretchAndFlowDetail,
+  noteNameForHz,
   parseBreathCountInput,
   sortSegmentsByProtocolOrder,
+  type CarryoverDetail,
+  type PitchWorkInput,
+  type ResonanceDetail,
   type Session,
   type SessionInput,
   type SessionSegmentInput,
@@ -26,7 +33,11 @@ import {
   type TagKind,
 } from '../../shared/model'
 import {
+  CARRYOVER_CONTEXTS,
+  CARRYOVER_WEEKLY_CONVERSATION_TARGET,
   LAST_STRETCH_AND_FLOW_PHASE,
+  RESONANCE_SENTENCES,
+  RESONANCE_STEPS,
   SEGMENT_DEFINITIONS,
   STRETCH_AND_FLOW_CARRYOVER,
   STRETCH_AND_FLOW_CARRYOVER_KINDS,
@@ -36,12 +47,23 @@ import {
   STRETCH_AND_FLOW_STAGE_BY_ID,
   STRETCH_AND_FLOW_STAGES,
   STRETCH_AND_FLOW_STEPS,
+  VFE_PITCH_TARGETS,
   stretchAndFlowStepLabel,
   type SegmentKind,
   type StretchAndFlowStage,
 } from '../../shared/protocol'
 
-const EDITOR_STEPS = ['start', 'warmupNote', 'glides', 'power', 'stretchAndFlow', 'endurance', 'finish'] as const
+const EDITOR_STEPS = [
+  'start',
+  'warmupNote',
+  'glides',
+  'power',
+  'stretchAndFlow',
+  'resonance',
+  'carryover',
+  'endurance',
+  'finish',
+] as const
 type EditorStep = (typeof EDITOR_STEPS)[number]
 
 const STEP_LABELS: Record<EditorStep, string> = {
@@ -50,6 +72,8 @@ const STEP_LABELS: Record<EditorStep, string> = {
   glides: 'Glides',
   power: 'POWER',
   stretchAndFlow: 'Stretch',
+  resonance: 'Resonance',
+  carryover: 'Carry-Over',
   endurance: 'Endurance',
   finish: 'Finish',
 }
@@ -326,6 +350,10 @@ export function SessionEditor({ existingSession }: { existingSession?: Session }
                   selectedTagIds={segmentOf('glides')!.tagIds}
                   onChange={(tagIds) => updateSegment('glides', { tagIds })}
                 />
+                <PitchFields
+                  segment={segmentOf('glides')!}
+                  onChange={(patch) => updateSegment('glides', patch)}
+                />
                 <TextField
                   label="Notes"
                   id="glide-notes"
@@ -394,6 +422,7 @@ export function SessionEditor({ existingSession }: { existingSession?: Session }
                       />
                       <span>Marked a comfortable speaking range</span>
                     </label>
+                    <PitchFields segment={segmentOf(kind)!} onChange={(patch) => updateSegment(kind, patch)} />
                     <TextField
                       label="Notes"
                       id={`${kind}-notes`}
@@ -433,6 +462,63 @@ export function SessionEditor({ existingSession }: { existingSession?: Session }
                   id="sf-notes"
                   value={segmentOf('stretchAndFlow')!.notes}
                   onChange={(value) => updateSegment('stretchAndFlow', { notes: value })}
+                  tall
+                />
+              </div>
+            )}
+          </PartStep>
+        )}
+
+        {currentStep === 'resonance' && (
+          <PartStep
+            kind="resonance"
+            included={includedKinds.includes('resonance')}
+            minutesText={minutesText}
+            onToggle={toggleSegment}
+            onMinutesChange={setMinutes}
+          >
+            {segmentOf('resonance') && (
+              <div className="editor-fields">
+                <ResonanceFields
+                  segment={segmentOf('resonance')!}
+                  onChange={(patch) => updateSegment('resonance', patch)}
+                />
+                <TagPicker
+                  kind="utterance"
+                  selectedTagIds={segmentOf('resonance')!.tagIds}
+                  onChange={(tagIds) => updateSegment('resonance', { tagIds })}
+                />
+                <TextField
+                  label="Notes"
+                  id="resonance-notes"
+                  value={segmentOf('resonance')!.notes}
+                  onChange={(value) => updateSegment('resonance', { notes: value })}
+                  tall
+                />
+              </div>
+            )}
+          </PartStep>
+        )}
+
+        {currentStep === 'carryover' && (
+          <PartStep
+            kind="carryover"
+            included={includedKinds.includes('carryover')}
+            minutesText={minutesText}
+            onToggle={toggleSegment}
+            onMinutesChange={setMinutes}
+          >
+            {segmentOf('carryover') && (
+              <div className="editor-fields">
+                <CarryoverFields
+                  segment={segmentOf('carryover')!}
+                  onChange={(patch) => updateSegment('carryover', patch)}
+                />
+                <TextField
+                  label="Notes"
+                  id="carryover-notes"
+                  value={segmentOf('carryover')!.notes}
+                  onChange={(value) => updateSegment('carryover', { notes: value })}
                   tall
                 />
               </div>
@@ -973,6 +1059,221 @@ function StretchAndFlowFields({
           tall
         />
       </fieldset>
+    </>
+  )
+}
+
+/**
+ * A frequency field. The stored value is Hz; the note name is derived for
+ * display, never stored (ADR-0003). Out-of-range input is clamped to the
+ * schema's 0-2000 band so the stored value and the field agree.
+ */
+function HzField({
+  label,
+  id,
+  value,
+  onChange,
+  hint,
+}: {
+  label: string
+  id: string
+  value: number | null
+  onChange: (value: number | null) => void
+  hint?: string
+}) {
+  const noteName = value !== null && value > 0 ? noteNameForHz(value) : null
+  return (
+    <div className="field">
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={0}
+        max={2000}
+        value={value === null ? '' : String(value)}
+        onChange={(event) => {
+          const { value: text } = event.target
+          if (text === '') {
+            onChange(null)
+            return
+          }
+          const parsed = Number.parseInt(text, 10)
+          onChange(Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 2000) : null)
+        }}
+      />
+      <p className="field-hint">
+        {noteName ? `About ${noteName}` : 'In Hz, from your pitch monitor.'}
+        {hint ? ` ${hint}` : ''}
+      </p>
+    </div>
+  )
+}
+
+/** The VFE pitch fields: high, low, and the chosen ideal-speaking-range low note. */
+function PitchFields({
+  segment,
+  onChange,
+}: {
+  segment: SessionSegmentInput
+  onChange: (patch: Partial<SessionSegmentInput>) => void
+}) {
+  const pitch: PitchWorkInput = segment.pitch ?? createEmptyPitchWork()
+  const [start, octaveDown] = VFE_PITCH_TARGETS
+  const updatePitch = (patch: Partial<PitchWorkInput>) => onChange({ pitch: { ...pitch, ...patch } })
+
+  return (
+    <fieldset className="pitch-fields">
+      <legend className="field-label">Pitch</legend>
+      <p className="field-hint">
+        The plan anchors: start at about {Math.round(start!.hz)} Hz ({start!.noteName}), down the octave to about{' '}
+        {Math.round(octaveDown!.hz)} Hz ({octaveDown!.noteName}).
+      </p>
+      <HzField label="High note" id="pitch-high" value={pitch.highHz} onChange={(value) => updatePitch({ highHz: value })} />
+      <HzField label="Low note" id="pitch-low" value={pitch.lowHz} onChange={(value) => updatePitch({ lowHz: value })} />
+      <HzField
+        label="Speaking-range low note"
+        id="pitch-speaking-low"
+        value={pitch.speakingRangeLowHz}
+        onChange={(value) => updatePitch({ speakingRangeLowHz: value })}
+        hint="Where you want your low note to sit. The plan sets no target for this one."
+      />
+    </fieldset>
+  )
+}
+
+/** The Resonance ladder, comfortable pitch, sentences, and intonation passes. */
+function ResonanceFields({
+  segment,
+  onChange,
+}: {
+  segment: SessionSegmentInput
+  onChange: (patch: Partial<SessionSegmentInput>) => void
+}) {
+  const detail: ResonanceDetail = segment.resonance ?? createEmptyResonanceDetail()
+  const update = (patch: Partial<ResonanceDetail>) => onChange({ resonance: { ...detail, ...patch } })
+
+  const setStep = (stepId: string, completed: boolean) => {
+    const existing = detail.steps.find((step) => step.stepId === stepId)
+    const steps = existing
+      ? detail.steps.map((step) => (step.stepId === stepId ? { ...step, completed } : step))
+      : [...detail.steps, { stepId, completed }]
+    update({ steps })
+  }
+
+  return (
+    <>
+      <fieldset className="sf-steps">
+        <legend>Ladder</legend>
+        {RESONANCE_STEPS.map((step) => (
+          <label key={step.id} className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={detail.steps.find((candidate) => candidate.stepId === step.id)?.completed ?? false}
+              onChange={(event) => setStep(step.id, event.target.checked)}
+            />
+            <span>{step.label}</span>
+          </label>
+        ))}
+      </fieldset>
+
+      <HzField
+        label="Comfortable pitch"
+        id="resonance-pitch"
+        value={detail.comfortablePitchHz}
+        onChange={(value) => update({ comfortablePitchHz: value })}
+        hint="The pitch you settled on with the monitor."
+      />
+
+      <fieldset className="sf-cues">
+        <legend>Sentences</legend>
+        {RESONANCE_SENTENCES.map((sentence) => (
+          <label key={sentence.id} className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={detail.sentenceIds.includes(sentence.id)}
+              onChange={(event) =>
+                update({
+                  sentenceIds: event.target.checked
+                    ? [...detail.sentenceIds, sentence.id]
+                    : detail.sentenceIds.filter((sentenceId) => sentenceId !== sentence.id),
+                })
+              }
+            />
+            <span>{sentence.text}</span>
+          </label>
+        ))}
+      </fieldset>
+
+      <NumberField
+        label="Intonation repetitions"
+        id="resonance-intonation"
+        value={detail.intonationRepetitions}
+        max={100}
+        onChange={(value) => update({ intonationRepetitions: value })}
+        hint="How many passes you did. The plan says as many as you need."
+      />
+    </>
+  )
+}
+
+/** Carry-Over: conversations, contexts, and whether a warm-up came first. */
+function CarryoverFields({
+  segment,
+  onChange,
+}: {
+  segment: SessionSegmentInput
+  onChange: (patch: Partial<SessionSegmentInput>) => void
+}) {
+  const detail: CarryoverDetail = segment.carryover ?? createEmptyCarryoverDetail()
+  const update = (patch: Partial<CarryoverDetail>) => onChange({ carryover: { ...detail, ...patch } })
+
+  return (
+    <>
+      <NumberField
+        label="Conversations this session"
+        id="carryover-count"
+        value={detail.conversationCount}
+        max={20}
+        onChange={(value) => update({ conversationCount: value })}
+        hint={`The plan asks for ${CARRYOVER_WEEKLY_CONVERSATION_TARGET} conversations a week. Log however many you did.`}
+      />
+      <fieldset className="sf-cues">
+        <legend>Context</legend>
+        {CARRYOVER_CONTEXTS.map((context) => (
+          <label key={context.id} className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={detail.contextIds.includes(context.id)}
+              onChange={(event) =>
+                update({
+                  contextIds: event.target.checked
+                    ? [...detail.contextIds, context.id]
+                    : detail.contextIds.filter((contextId) => contextId !== context.id),
+                })
+              }
+            />
+            <span>{context.text}</span>
+          </label>
+        ))}
+      </fieldset>
+      <TextField
+        label="Other context"
+        id="carryover-other"
+        value={detail.customContext}
+        onChange={(value) => update({ customContext: value })}
+        hint="Anything not in the list."
+      />
+      <label className="checkbox-field">
+        <input
+          type="checkbox"
+          checked={detail.warmedUpBefore ?? false}
+          onChange={(event) => update({ warmedUpBefore: event.target.checked })}
+        />
+        <span>Warmed up before the conversation</span>
+      </label>
     </>
   )
 }

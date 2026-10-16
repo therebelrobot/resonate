@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  CARRYOVER_CONTEXTS,
+  CARRYOVER_CONTEXT_IDS,
+  CARRYOVER_WEEKLY_CONVERSATION_TARGET,
   LAST_STRETCH_AND_FLOW_PHASE,
+  PRACTICE_TRACKS,
+  PROTOCOL_REFERENCES,
+  RESONANCE_SENTENCES,
+  RESONANCE_SENTENCE_IDS,
+  RESONANCE_STEPS,
+  RESONANCE_STEP_IDS,
+  SEGMENT_KINDS,
+  SEGMENT_TRACK,
   STRETCH_AND_FLOW_CARRYOVER,
   STRETCH_AND_FLOW_CARRYOVER_IDS,
   STRETCH_AND_FLOW_CARRYOVER_KINDS,
@@ -13,6 +24,8 @@ import {
   STRETCH_AND_FLOW_STAGES,
   STRETCH_AND_FLOW_STEP_IDS,
   STRETCH_AND_FLOW_STEPS,
+  TRACK_DEFINITIONS,
+  VFE_PITCH_TARGETS,
 } from '../shared/protocol'
 
 describe('stretch and flow protocol integrity', () => {
@@ -87,5 +100,51 @@ describe('stretch and flow protocol integrity', () => {
       rationale?.text,
       'Remember, the idea is that the patient gets very good at toggling back and forth between the air only productions, and the voiced productions. Spend time either at the very beginning of introducing "air only" to the patient on the "ooo" vowel to toggle back and forth between these two phases without and then with voicing.',
     )
+  })
+})
+
+describe('resonance and carryover protocol integrity', () => {
+  it('keeps the id tuples in sync with the object arrays', () => {
+    assert.deepEqual([...RESONANCE_STEP_IDS], RESONANCE_STEPS.map((step) => step.id))
+    assert.deepEqual([...RESONANCE_SENTENCE_IDS], RESONANCE_SENTENCES.map((sentence) => sentence.id))
+    assert.deepEqual([...CARRYOVER_CONTEXT_IDS], CARRYOVER_CONTEXTS.map((context) => context.id))
+  })
+
+  it('has unique ids within each new catalog', () => {
+    assert.equal(new Set(RESONANCE_STEPS.map((step) => step.id)).size, RESONANCE_STEPS.length)
+    assert.equal(new Set(RESONANCE_SENTENCES.map((sentence) => sentence.id)).size, RESONANCE_SENTENCES.length)
+    assert.equal(new Set(PROTOCOL_REFERENCES.map((reference) => reference.id)).size, PROTOCOL_REFERENCES.length)
+  })
+
+  it('prints the five sentences from the SLP notes, verbatim', () => {
+    assert.deepEqual(
+      RESONANCE_SENTENCES.map((sentence) => sentence.text),
+      ['Mary made me mad', 'Mother made marmalade', 'Who knows the news', 'William was waiting', 'Where were we Wednesday'],
+    )
+  })
+
+  it('carries the two pitch anchors as F4 and F3', () => {
+    assert.equal(VFE_PITCH_TARGETS.length, 2)
+    assert.equal(VFE_PITCH_TARGETS[0]!.noteName, 'F4')
+    assert.equal(VFE_PITCH_TARGETS[1]!.noteName, 'F3')
+    for (const target of VFE_PITCH_TARGETS) assert.ok(target.hz > 0)
+  })
+
+  it('carries both reference links sent by the SLP', () => {
+    const urls = PROTOCOL_REFERENCES.map((reference) => reference.url)
+    assert.ok(urls.includes('https://acousticgender.space/'))
+    assert.ok(urls.some((url) => url.startsWith('https://wiki.sumianvoice.com/')))
+  })
+
+  it('asks for the carry-over target the notes give', () => {
+    assert.equal(CARRYOVER_WEEKLY_CONVERSATION_TARGET, 2)
+  })
+
+  it('maps every segment to a track and defines every track', () => {
+    assert.deepEqual(Object.keys(SEGMENT_TRACK).sort(), [...SEGMENT_KINDS].sort())
+    assert.deepEqual([...PRACTICE_TRACKS].sort(), Object.keys(TRACK_DEFINITIONS).sort())
+    // The two new segments each have their own track (ADR-0003).
+    assert.equal(SEGMENT_TRACK.resonance, 'resonance')
+    assert.equal(SEGMENT_TRACK.carryover, 'carryover')
   })
 })

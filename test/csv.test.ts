@@ -191,4 +191,46 @@ describe('session CSV export', () => {
     assert.ok(row.includes('Vowels elongated'))
     assert.ok(row.includes('Free'))
   })
+
+  it('appends the resonance, carryover, and pitch columns after the Stretch and Flow block', () => {
+    const csvText = buildSessionsCsv(
+      [
+        session('2026-01-15T03:00:00.000Z', [
+          segment('glides', { seconds: 300, pitch: { highHz: 350, lowHz: 175, speakingRangeLowHz: 165 } }),
+          segment('resonance', {
+            seconds: 300,
+            resonance: {
+              steps: [{ stepId: 'contrastResonance', completed: true }],
+              comfortablePitchHz: 180,
+              sentenceIds: ['maryMadeMeMad'],
+              intonationRepetitions: 3,
+            },
+          }),
+          segment('carryover', {
+            seconds: 300,
+            carryover: {
+              conversationCount: 2,
+              contextIds: ['peerProgramming'],
+              customContext: '',
+              warmedUpBefore: true,
+            },
+          }),
+        ]),
+      ],
+      [],
+      'UTC',
+    )
+    const lines = csvText.trimEnd().split('\r\n')
+    const headerColumns = lines[0]!.replace(/^\ufeff/, '').split(',')
+    // The Stretch and Flow block keeps its position; the new block is appended.
+    assert.equal(headerColumns.indexOf('Stretch and Flow Stage'), 36)
+    assert.equal(headerColumns.indexOf('Carryover Items'), 43)
+    assert.equal(headerColumns.indexOf('Pitch High (Hz)'), 44)
+    assert.equal(headerColumns.indexOf('Resonance Minutes'), 54)
+    assert.equal(headerColumns.indexOf('Carryover Minutes'), 55)
+    const body = lines.slice(1).join('\n')
+    assert.ok(body.includes('350'))
+    assert.ok(body.includes('Mary made me mad'))
+    assert.ok(body.includes('Peer programming'))
+  })
 })

@@ -17,6 +17,8 @@
   --effort-wash: #f2e0d5;
   --ease: #2f7d76;
   --ease-wash: #d8ece8;
+  --resonance: #5f4bb0;
+  --carryover: #9c3f6b;
   --danger: #a23b32;
   --ok: #1d6b4f;
   --focus: #4a63c4;
@@ -46,6 +48,8 @@
     --effort-wash: #38271d;
     --ease: #6cc0b6;
     --ease-wash: #17332f;
+    --resonance: #b3a1ee;
+    --carryover: #e79ac0;
     --danger: #e58a80;
     --ok: #7fcfab;
     --focus: #a3b4f0;
@@ -67,6 +71,8 @@
   --effort-wash: #38271d;
   --ease: #6cc0b6;
   --ease-wash: #17332f;
+  --resonance: #b3a1ee;
+  --carryover: #e79ac0;
   --danger: #e58a80;
   --ok: #7fcfab;
   --focus: #a3b4f0;
@@ -481,6 +487,8 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .chart-reference-line { stroke: var(--ink-faint); stroke-width: 0.4; stroke-dasharray: 3 2; opacity: 0.7; }
 .chart-fill-vfe { fill: var(--harbor); background: var(--harbor); }
 .chart-fill-stretch { fill: var(--ease); background: var(--ease); }
+.chart-fill-resonance { fill: var(--resonance); background: var(--resonance); }
+.chart-fill-carryover { fill: var(--carryover); background: var(--carryover); }
 .chart-fill-endurance { fill: var(--effort); background: var(--effort); }
 .chart-line { stroke: var(--harbor); stroke-width: 1.2; }
 .chart-dot { fill: var(--ease); }

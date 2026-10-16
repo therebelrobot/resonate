@@ -4,12 +4,16 @@ import { PRACTICE_TRACKS, TRACK_DEFINITIONS, type PracticeTrack } from '../../sh
 const TRACK_FILL_CLASS: Record<PracticeTrack, string> = {
   vocalFunction: 'chart-fill-vfe',
   stretchAndFlow: 'chart-fill-stretch',
+  resonance: 'chart-fill-resonance',
+  carryover: 'chart-fill-carryover',
   endurance: 'chart-fill-endurance',
 }
 
 function minutesOfTrack(point: DailyTrendPoint, track: PracticeTrack): number {
   if (track === 'vocalFunction') return point.vocalFunctionMinutes
   if (track === 'stretchAndFlow') return point.stretchAndFlowMinutes
+  if (track === 'resonance') return point.resonanceMinutes
+  if (track === 'carryover') return point.carryoverMinutes
   return point.enduranceMinutes
 }
 

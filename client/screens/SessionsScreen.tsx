@@ -159,6 +159,8 @@ const SEGMENT_TRACK_LABEL: Record<string, string> = {
   powerAscending: 'POWER up',
   powerDescending: 'POWER down',
   stretchAndFlow: 'Stretch and Flow',
+  resonance: 'Resonance',
+  carryover: 'Carry-Over',
   endurance: 'Endurance',
 }
 

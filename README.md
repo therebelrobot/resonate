@@ -16,7 +16,16 @@ From the plan, as written:
 |---|---|---|
 | **Vocal Function Exercises** - warm-up note, glides, POWER up and down | 5-15 min | 5-7 |
 | **Stretch and Flow** - whichever phase you are on | 5-10 min | 5-7 |
+| **Resonance practice** - h-sounds, vowels, humming, intoned sentences | 5-15 min | 5-7\* |
+| **Carry-Over practice** - voice awareness during real conversations | 5-15 min | 2+ a week |
 | **Endurance** - record a Star Trek episode summary, or read your cozy novel aloud | building toward an hour | daily |
+
+\* The Resonance cadence and per-session length are not printed in the notes; the app starts them at the VFE band and says so on the plan screen. Confirm with your SLP.
+
+The glides and POWER steps now carry the pitch anchors from the notes: start at about 350 Hz
+(F4), down the octave to about 175 Hz (F3), then choose where your low note sits in your ideal
+speaking range. You type the Hz your pitch monitor shows and the app derives the note name; the
+low-note choice has no fixed target.
 
 Three things in the plan are load-bearing, so the app measures them rather than hoping:
 
@@ -96,7 +105,8 @@ only after the server process restarts (in Docker: `docker compose up -d --force
 
 **Insights -> Make a report for your SLP** (also under Settings) builds a report from a date
 range: adherence per track, minutes per day, the effort-before-to-after shift, warm-up clarity
-and voice breaks over time, glide share, POWER bests, Stretch and Flow phase, and the tags you
+and voice breaks over time, glide share, pitch range, POWER bests, Stretch and Flow phase,
+resonance ladder and sentence coverage, carry-over conversations, and the tags you
 use most. You can leave out what you wrote and keep measurements only, include or skip drafts,
 and untick individual sessions. **Print or save as PDF** uses the browser's print dialog; on
 iPhone choose Print, then Share.

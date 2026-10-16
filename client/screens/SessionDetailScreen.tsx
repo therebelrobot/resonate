@@ -9,12 +9,19 @@ import {
   SESSION_ROLE_LABELS,
   TAG_KINDS,
   TAG_KIND_LABELS,
+  noteNameForHz,
+  type CarryoverDetail,
+  type PitchWorkInput,
+  type ResonanceDetail,
   type Session,
   type StretchAndFlowDetail,
   type TagKind,
 } from '../../shared/model'
 import {
+  CARRYOVER_CONTEXT_BY_ID,
   PRACTICE_TRACKS,
+  RESONANCE_SENTENCE_BY_ID,
+  RESONANCE_STEP_BY_ID,
   SEGMENT_DEFINITIONS,
   STRETCH_AND_FLOW_CARRYOVER_BY_ID,
   STRETCH_AND_FLOW_CARRYOVER_KIND_LABELS,
@@ -114,6 +121,9 @@ export function SessionDetailScreen({ session }: { session: Session }) {
             {segment.phaseNumber !== null && <li>Stretch and Flow phase: {segment.phaseNumber}</li>}
             {segment.coordinationRating !== null && <li>Breathing and phonation: {formatRating(segment.coordinationRating)}</li>}
             {segment.stretchAndFlow && <StretchAndFlowDetailRows detail={segment.stretchAndFlow} />}
+            {segment.pitch && <PitchDetailRows pitch={segment.pitch} />}
+            {segment.resonance && <ResonanceDetailRows detail={segment.resonance} />}
+            {segment.carryover && <CarryoverDetailRows detail={segment.carryover} />}
             {segment.paceRating !== null && <li>Pace: {formatRating(segment.paceRating)}</li>}
             {segment.fatigueRating !== null && <li>Fatigue: {formatRating(segment.fatigueRating)}</li>}
           </ul>
@@ -202,6 +212,52 @@ function StretchAndFlowDetailRows({ detail }: { detail: StretchAndFlowDetail }) 
       {detail.carryover?.kind && <li>Carryover kind: {STRETCH_AND_FLOW_CARRYOVER_KIND_LABELS[detail.carryover.kind]}</li>}
       {carryoverItems.length > 0 && <li>Carryover items: {carryoverItems.join(', ')}</li>}
       {detail.carryover?.customText.trim() && <li>Carryover notes: {detail.carryover.customText}</li>}
+    </>
+  )
+}
+
+function describeHz(hz: number): string {
+  return `${hz} Hz (${noteNameForHz(hz)})`
+}
+
+/** The VFE pitch readings, resolved to note names (spec 7.4). */
+function PitchDetailRows({ pitch }: { pitch: PitchWorkInput }) {
+  return (
+    <>
+      {pitch.highHz !== null && <li>High note: {describeHz(pitch.highHz)}</li>}
+      {pitch.lowHz !== null && <li>Low note: {describeHz(pitch.lowHz)}</li>}
+      {pitch.speakingRangeLowHz !== null && <li>Speaking-range low note: {describeHz(pitch.speakingRangeLowHz)}</li>}
+    </>
+  )
+}
+
+/** The structured Resonance detail, resolved to catalog text (spec 7.4). */
+function ResonanceDetailRows({ detail }: { detail: ResonanceDetail }) {
+  const rungLabels = detail.steps
+    .filter((step) => step.completed)
+    .map((step) => RESONANCE_STEP_BY_ID.get(step.stepId)?.label ?? step.stepId)
+  const sentenceTexts = detail.sentenceIds.map(
+    (sentenceId) => RESONANCE_SENTENCE_BY_ID.get(sentenceId)?.text ?? sentenceId,
+  )
+  return (
+    <>
+      {rungLabels.length > 0 && <li>Ladder: {rungLabels.join(', ')}</li>}
+      {detail.comfortablePitchHz !== null && <li>Comfortable pitch: {describeHz(detail.comfortablePitchHz)}</li>}
+      {sentenceTexts.length > 0 && <li>Sentences: {sentenceTexts.join(', ')}</li>}
+      {detail.intonationRepetitions !== null && <li>Intonation repetitions: {detail.intonationRepetitions}</li>}
+    </>
+  )
+}
+
+/** The structured Carry-Over detail, resolved to catalog text (spec 7.4). */
+function CarryoverDetailRows({ detail }: { detail: CarryoverDetail }) {
+  const contextTexts = detail.contextIds.map((contextId) => CARRYOVER_CONTEXT_BY_ID.get(contextId)?.text ?? contextId)
+  return (
+    <>
+      {detail.conversationCount !== null && <li>Conversations: {detail.conversationCount}</li>}
+      {contextTexts.length > 0 && <li>Context: {contextTexts.join(', ')}</li>}
+      {detail.customContext.trim() && <li>Other context: {detail.customContext}</li>}
+      {detail.warmedUpBefore !== null && <li>Warmed up before: {detail.warmedUpBefore ? 'Yes' : 'No'}</li>}
     </>
   )
 }

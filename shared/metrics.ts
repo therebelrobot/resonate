@@ -1,7 +1,10 @@
 import {
+  CARRYOVER_CONTEXTS,
   FIRST_STRETCH_AND_FLOW_PHASE,
   GLIDE_SEGMENT_KIND,
   PRACTICE_TRACKS,
+  RESONANCE_SENTENCES,
+  RESONANCE_STEPS,
   SEGMENT_TRACK,
   STRETCH_AND_FLOW_CARRYOVER,
   STRETCH_AND_FLOW_CARRYOVER_BY_ID,
@@ -61,10 +64,17 @@ export function maximum(values: readonly number[]): number | null {
   return values.reduce((largest, value) => (value > largest ? value : largest), firstValue)
 }
 
+export function minimum(values: readonly number[]): number | null {
+  if (values.length === 0) return null
+  const firstValue = values[0]
+  if (firstValue === undefined) return null
+  return values.reduce((smallest, value) => (value < smallest ? value : smallest), firstValue)
+}
+
 export type MinutesByTrack = Record<PracticeTrack, number>
 
 export function emptyMinutesByTrack(): MinutesByTrack {
-  return { vocalFunction: 0, stretchAndFlow: 0, endurance: 0 }
+  return { vocalFunction: 0, stretchAndFlow: 0, resonance: 0, carryover: 0, endurance: 0 }
 }
 
 export function minutesByTrack(session: Session): MinutesByTrack {
@@ -146,16 +156,22 @@ export function trackProgress(sessions: readonly Session[], referenceDate: Date)
   const minutesPerDayByTrack: Record<PracticeTrack, Map<string, number>> = {
     vocalFunction: new Map(),
     stretchAndFlow: new Map(),
+    resonance: new Map(),
+    carryover: new Map(),
     endurance: new Map(),
   }
   const sessionMinutesByTrack: Record<PracticeTrack, number[]> = {
     vocalFunction: [],
     stretchAndFlow: [],
+    resonance: [],
+    carryover: [],
     endurance: [],
   }
   const sessionCountThisWeekByTrack: Record<PracticeTrack, number> = {
     vocalFunction: 0,
     stretchAndFlow: 0,
+    resonance: 0,
+    carryover: 0,
     endurance: 0,
   }
 
@@ -319,6 +335,23 @@ export interface ProtocolHighlights {
   stretchAndFlowCueAdherence: number | null
   /** Distinct catalog items practiced, across all sessions. */
   stretchAndFlowCarryoverItemCount: number
+  resonanceMinutes: number
+  resonanceSessionCount: number
+  /** Distinct Resonance sentences practised, across all sessions. */
+  resonanceSentenceCount: number
+  /** The highest Resonance rung completed in the most recent recorded session. */
+  resonanceTopStepId: string | null
+  averageResonancePitchHz: number | null
+  carryoverMinutes: number
+  carryoverSessionCount: number
+  /** Conversations where voice was watched, across all sessions. */
+  carryoverConversationTotal: number
+  /** Distinct Carry-Over contexts used, across all sessions. */
+  carryoverContextCount: number
+  /** Highest VFE note reached, in Hz. */
+  highestPitchHz: number | null
+  /** Lowest VFE note reached, in Hz. */
+  lowestPitchHz: number | null
 }
 
 /** Everything the plan asks you to watch, rolled up over the sessions given. */
@@ -393,6 +426,9 @@ export function protocolHighlights(sessions: readonly Session[]): ProtocolHighli
   const cueAdherence = stretchAndFlowCueAdherence(completeSessions)
   const cueShares = Object.values(cueAdherence.shareByCueId)
   const carryoverProgress = stretchAndFlowCarryoverProgress(completeSessions)
+  const resonance = resonanceSummary(completeSessions)
+  const carryover = carryoverSummary(completeSessions)
+  const pitch = pitchRangeSummary(completeSessions)
 
   return {
     sessionCount: completeSessions.length,
@@ -414,6 +450,17 @@ export function protocolHighlights(sessions: readonly Session[]): ProtocolHighli
     averageStretchAndFlowBreathCount: average(stretchAndFlowBreathCounts),
     stretchAndFlowCueAdherence: cueShares.length === 0 ? null : average(cueShares),
     stretchAndFlowCarryoverItemCount: carryoverProgress.practicedItemIds.length,
+    resonanceMinutes: resonance.minutes,
+    resonanceSessionCount: resonance.sessionCount,
+    resonanceSentenceCount: resonance.sentenceIdsPractised.length,
+    resonanceTopStepId: resonance.latestTopStepId,
+    averageResonancePitchHz: resonance.averageComfortablePitchHz,
+    carryoverMinutes: carryover.minutes,
+    carryoverSessionCount: carryover.sessionCount,
+    carryoverConversationTotal: carryover.conversationTotal,
+    carryoverContextCount: carryover.contextIdsUsed.length,
+    highestPitchHz: pitch.highestHz,
+    lowestPitchHz: pitch.lowestHz,
   }
 }
 
@@ -421,6 +468,8 @@ export interface DailyTrendPoint {
   dayKey: string
   vocalFunctionMinutes: number
   stretchAndFlowMinutes: number
+  resonanceMinutes: number
+  carryoverMinutes: number
   enduranceMinutes: number
   totalMinutes: number
   averageWarmupClarity: number | null
@@ -465,8 +514,10 @@ export function dailyTrend(sessions: readonly Session[], referenceDate: Date, da
       dayKey,
       vocalFunctionMinutes: minutes.vocalFunction,
       stretchAndFlowMinutes: minutes.stretchAndFlow,
+      resonanceMinutes: minutes.resonance,
+      carryoverMinutes: minutes.carryover,
       enduranceMinutes: minutes.endurance,
-      totalMinutes: minutes.vocalFunction + minutes.stretchAndFlow + minutes.endurance,
+      totalMinutes: minutes.vocalFunction + minutes.stretchAndFlow + minutes.resonance + minutes.carryover + minutes.endurance,
       averageWarmupClarity: average(clarityValues),
       voiceBreaks: voiceBreakValues.length === 0 ? null : voiceBreakValues.reduce((total, value) => total + value, 0),
       longestSustainSeconds: maximum(sustainValues),
@@ -772,3 +823,161 @@ export function stretchAndFlowCarryoverCatalogSizeByKind(): Record<StretchAndFlo
 
 /** Total catalog size, for a single coverage figure. */
 export const STRETCH_AND_FLOW_CARRYOVER_CATALOG_SIZE = STRETCH_AND_FLOW_CARRYOVER.length
+
+// ---------------------------------------------------------------------------
+// Resonance Practice and Carry-Over Practice metrics (spec 5). Pure functions
+// over stored sessions; no new storage. Drafts are ignored, consistent with the
+// rest of this file.
+// ---------------------------------------------------------------------------
+
+/** A Resonance segment counts when it has time or a recorded detail (spec 5). */
+function isCountedResonanceSegment(segment: SessionSegmentInput): boolean {
+  return segment.kind === 'resonance' && (segment.seconds > 0 || segment.resonance !== null)
+}
+
+/** A Carry-Over segment counts when it has time or a recorded detail (spec 5). */
+function isCountedCarryoverSegment(segment: SessionSegmentInput): boolean {
+  return segment.kind === 'carryover' && (segment.seconds > 0 || segment.carryover !== null)
+}
+
+export interface ResonanceSummary {
+  minutes: number
+  sessionCount: number
+  /** Distinct sentence ids practised across the sessions given. */
+  sentenceIdsPractised: string[]
+  /** The highest rung completed in the most recent recorded Resonance session. */
+  latestTopStepId: string | null
+  averageComfortablePitchHz: number | null
+  totalIntonationRepetitions: number
+}
+
+export function resonanceSummary(sessions: readonly Session[]): ResonanceSummary {
+  const sentenceIds = new Set<string>()
+  const comfortablePitches: number[] = []
+  let minutes = 0
+  let sessionCount = 0
+  let totalIntonationRepetitions = 0
+
+  for (const session of completedSessionsNewestFirst(sessions)) {
+    let counted = false
+    for (const segment of segmentsOfKind(session, 'resonance')) {
+      if (!isCountedResonanceSegment(segment)) continue
+      counted = true
+      minutes += segment.seconds / 60
+      const detail = segment.resonance
+      if (!detail) continue
+      for (const sentenceId of detail.sentenceIds) sentenceIds.add(sentenceId)
+      if (detail.comfortablePitchHz !== null) comfortablePitches.push(detail.comfortablePitchHz)
+      if (detail.intonationRepetitions !== null) totalIntonationRepetitions += detail.intonationRepetitions
+    }
+    if (counted) sessionCount += 1
+  }
+
+  let latestTopStepId: string | null = null
+  for (const session of completedSessionsNewestFirst(sessions)) {
+    const detail = segmentsOfKind(session, 'resonance')
+      .map((segment) => segment.resonance)
+      .find((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+    if (!detail) continue
+    const completed = new Set(detail.steps.filter((step) => step.completed).map((step) => step.stepId))
+    let top: string | null = null
+    for (const step of RESONANCE_STEPS) if (completed.has(step.id)) top = step.id
+    latestTopStepId = top
+    break
+  }
+
+  return {
+    minutes,
+    sessionCount,
+    sentenceIdsPractised: [...sentenceIds],
+    latestTopStepId,
+    averageComfortablePitchHz: average(comfortablePitches),
+    totalIntonationRepetitions,
+  }
+}
+
+export interface CarryoverSummary {
+  minutes: number
+  sessionCount: number
+  /** Conversations where voice was watched. */
+  conversationTotal: number
+  /** Distinct context ids used. */
+  contextIdsUsed: string[]
+  /** Sessions where a warm-up was recorded as done before the conversation(s). */
+  warmedUpSessionCount: number
+}
+
+export function carryoverSummary(sessions: readonly Session[]): CarryoverSummary {
+  const contextIds = new Set<string>()
+  let minutes = 0
+  let sessionCount = 0
+  let conversationTotal = 0
+  let warmedUpSessionCount = 0
+
+  for (const session of completedSessionsNewestFirst(sessions)) {
+    let counted = false
+    let warmedUp = false
+    for (const segment of segmentsOfKind(session, 'carryover')) {
+      if (!isCountedCarryoverSegment(segment)) continue
+      counted = true
+      minutes += segment.seconds / 60
+      const detail = segment.carryover
+      if (!detail) continue
+      if (detail.conversationCount !== null) conversationTotal += detail.conversationCount
+      for (const contextId of detail.contextIds) contextIds.add(contextId)
+      if (detail.warmedUpBefore) warmedUp = true
+    }
+    if (counted) sessionCount += 1
+    if (warmedUp) warmedUpSessionCount += 1
+  }
+
+  return { minutes, sessionCount, conversationTotal, contextIdsUsed: [...contextIds], warmedUpSessionCount }
+}
+
+/** Conversations logged in the trailing seven days, against the two-a-week target. */
+export function carryoverConversationsThisWeek(sessions: readonly Session[], referenceDate: Date): number {
+  const weekStartKey = toLocalDayKey(addDays(referenceDate, -(WEEK_DAY_COUNT - 1)))
+  const todayKey = toLocalDayKey(referenceDate)
+  let total = 0
+  for (const session of completedSessionsNewestFirst(sessions)) {
+    const dayKey = localDayKey(session.occurredAt)
+    if (dayKey < weekStartKey || dayKey > todayKey) continue
+    for (const segment of segmentsOfKind(session, 'carryover')) {
+      const conversationCount = segment.carryover?.conversationCount ?? null
+      if (conversationCount !== null) total += conversationCount
+    }
+  }
+  return total
+}
+
+export interface PitchRangeSummary {
+  /** Highest VFE note reached across sessions, in Hz. */
+  highestHz: number | null
+  /** Lowest VFE note reached across sessions, in Hz. */
+  lowestHz: number | null
+  /** The most recently recorded ideal-speaking-range low note, in Hz. */
+  latestSpeakingRangeLowHz: number | null
+}
+
+export function pitchRangeSummary(sessions: readonly Session[]): PitchRangeSummary {
+  const highValues: number[] = []
+  const lowValues: number[] = []
+  let latestSpeakingRangeLowHz: number | null = null
+  for (const session of completedSessionsNewestFirst(sessions)) {
+    for (const segment of session.segments) {
+      const pitch = segment.pitch
+      if (!pitch) continue
+      if (pitch.highHz !== null) highValues.push(pitch.highHz)
+      if (pitch.lowHz !== null) lowValues.push(pitch.lowHz)
+      if (latestSpeakingRangeLowHz === null && pitch.speakingRangeLowHz !== null) {
+        latestSpeakingRangeLowHz = pitch.speakingRangeLowHz
+      }
+    }
+  }
+  return { highestHz: maximum(highValues), lowestHz: minimum(lowValues), latestSpeakingRangeLowHz }
+}
+
+/** Catalog sizes, for coverage counts in the UI. */
+export const RESONANCE_STEP_COUNT = RESONANCE_STEPS.length
+export const RESONANCE_SENTENCE_COUNT = RESONANCE_SENTENCES.length
+export const CARRYOVER_CONTEXT_COUNT = CARRYOVER_CONTEXTS.length

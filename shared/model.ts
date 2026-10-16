@@ -86,6 +86,44 @@ export interface StretchAndFlowDetail {
   carryover: StretchAndFlowCarryoverLog | null
 }
 
+/** VFE pitch, in Hz. The note name is derived for display, not stored (ADR-0003). */
+export interface PitchWorkInput {
+  /** Highest note reached this session, in Hz. */
+  highHz: number | null
+  /** Lowest note reached this session, in Hz. */
+  lowHz: number | null
+  /** The low note chosen for the ideal speaking range, in Hz. */
+  speakingRangeLowHz: number | null
+}
+
+/** One rung of the Resonance ladder, as actually done. */
+export interface ResonanceStepProgress {
+  /** Stable id from RESONANCE_STEPS, e.g. 'contrastResonance'. */
+  stepId: string
+  completed: boolean
+}
+
+export interface ResonanceDetail {
+  steps: ResonanceStepProgress[]
+  /** The pitch found on the monitor, in Hz. Null when not recorded. */
+  comfortablePitchHz: number | null
+  /** Sentence ids practised, from RESONANCE_SENTENCES. */
+  sentenceIds: string[]
+  /** How many intonation passes were done. Null when not recorded. */
+  intonationRepetitions: number | null
+}
+
+export interface CarryoverDetail {
+  /** Conversations where voice was monitored. Null when not recorded. */
+  conversationCount: number | null
+  /** Context ids, from CARRYOVER_CONTEXTS. */
+  contextIds: string[]
+  /** Free text for contexts not in the catalog. */
+  customContext: string
+  /** Whether a warm-up was done before the conversation(s). */
+  warmedUpBefore: boolean | null
+}
+
 export type SessionStatus = 'draft' | 'complete'
 
 /**
@@ -115,6 +153,12 @@ export interface SessionSegmentInput {
   coordinationRating: number | null
   /** Stretch and Flow - structured detail; null for other kinds and legacy rows. */
   stretchAndFlow: StretchAndFlowDetail | null
+  /** Vocal Function - pitch work in Hz (glides and POWER); null for other kinds and legacy rows. */
+  pitch: PitchWorkInput | null
+  /** Resonance Practice - structured detail; null for other kinds and legacy rows. */
+  resonance: ResonanceDetail | null
+  /** Carry-Over Practice - structured detail; null for other kinds and legacy rows. */
+  carryover: CarryoverDetail | null
   /** Endurance */
   paceRating: number | null
   fatigueRating: number | null
@@ -191,6 +235,9 @@ export function createEmptySegmentInput(kind: SegmentKind): SessionSegmentInput 
     phaseNumber: null,
     coordinationRating: null,
     stretchAndFlow: null,
+    pitch: null,
+    resonance: null,
+    carryover: null,
     paceRating: null,
     fatigueRating: null,
     tagIds: [],
@@ -199,12 +246,43 @@ export function createEmptySegmentInput(kind: SegmentKind): SessionSegmentInput 
 }
 
 /**
- * Legacy rows were stored before `stretchAndFlow` existed, so the key is simply
- * absent on read. This fills it with null so downstream code never sees
- * `undefined`. Read-time normalization, not a data migration (spec 3.3).
+ * Legacy rows were stored before `stretchAndFlow` (and later `pitch`,
+ * `resonance`, `carryover`) existed, so the keys are simply absent on read. This
+ * fills them with null so downstream code never sees `undefined`. Read-time
+ * normalization, not a data migration (spec 3.3).
  */
 export function normalizeSegmentInput(segment: SessionSegmentInput): SessionSegmentInput {
-  return segment.stretchAndFlow === undefined ? { ...segment, stretchAndFlow: null } : segment
+  if (
+    segment.stretchAndFlow !== undefined &&
+    segment.pitch !== undefined &&
+    segment.resonance !== undefined &&
+    segment.carryover !== undefined
+  ) {
+    return segment
+  }
+  return {
+    ...segment,
+    stretchAndFlow: segment.stretchAndFlow ?? null,
+    pitch: segment.pitch ?? null,
+    resonance: segment.resonance ?? null,
+    carryover: segment.carryover ?? null,
+  }
+}
+
+/** The equal-temperament note names, A4 = 440 Hz. */
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const
+
+/**
+ * The note name nearest a frequency, in scientific pitch notation (A4 = 440 Hz).
+ * Rounds to the nearest semitone, so a good-faith reading of "about 350" comes
+ * out "F4". The stored value stays Hz; the name is derived, never stored
+ * (ADR-0003).
+ */
+export function noteNameForHz(hz: number): string {
+  const semitonesFromA4 = Math.round(12 * Math.log2(hz / 440))
+  const noteIndex = ((((semitonesFromA4 + 9) % 12) + 12) % 12)
+  const octave = 4 + Math.floor((semitonesFromA4 + 9) / 12)
+  return `${NOTE_NAMES[noteIndex]}${octave}`
 }
 
 /** A blank Stretch and Flow detail, for the editor to start from. */
@@ -218,6 +296,21 @@ export function createEmptyStretchAndFlowDetail(): StretchAndFlowDetail {
     toggledAirOnlyAndVoiced: null,
     carryover: null,
   }
+}
+
+/** A blank pitch-work object, for the editor to start from. */
+export function createEmptyPitchWork(): PitchWorkInput {
+  return { highHz: null, lowHz: null, speakingRangeLowHz: null }
+}
+
+/** A blank Resonance detail, for the editor to start from. */
+export function createEmptyResonanceDetail(): ResonanceDetail {
+  return { steps: [], comfortablePitchHz: null, sentenceIds: [], intonationRepetitions: null }
+}
+
+/** A blank Carry-Over detail, for the editor to start from. */
+export function createEmptyCarryoverDetail(): CarryoverDetail {
+  return { conversationCount: null, contextIds: [], customContext: '', warmedUpBefore: null }
 }
 
 /** The breath-count field's accepted range, matching the schema (spec 6.1). */
@@ -238,12 +331,18 @@ export function parseBreathCountInput(text: string): { value: number | null; err
   return { value: parsed, error: null }
 }
 
-/** The parts a new session starts with: everything except the downward POWER pass. */
+/**
+ * The parts a new session starts with: everything except the downward POWER
+ * pass and the Carry-Over practice. Both are opt-in in the editor, which matches
+ * the plan: POWER - down is occasional, and Carry-Over is two conversations a
+ * week rather than daily.
+ */
 export const DEFAULT_SEGMENT_KINDS: readonly SegmentKind[] = [
   'warmupNote',
   'glides',
   'powerAscending',
   'stretchAndFlow',
+  'resonance',
   'endurance',
 ]
 

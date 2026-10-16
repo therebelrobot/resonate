@@ -2,12 +2,17 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   createEmptySegmentInput,
+  type CarryoverDetail,
+  type PitchWorkInput,
+  type ResonanceDetail,
   type Session,
   type SessionSegmentInput,
   type StretchAndFlowDetail,
 } from '../shared/model'
 import { stretchAndFlowStageLabel, type SegmentKind } from '../shared/protocol'
 import {
+  carryoverConversationsThisWeek,
+  carryoverSummary,
   currentStretchAndFlowStage,
   currentStretchAndFlowStageKey,
   currentStretchAndFlowStageLabel,
@@ -16,8 +21,10 @@ import {
   glideShareSummary,
   localDayKey,
   minutesByTrack,
+  pitchRangeSummary,
   practiceStreakDays,
   protocolHighlights,
+  resonanceSummary,
   sessionTotalMinutes,
   stretchAndFlowBreathCountTrend,
   stretchAndFlowCarryoverProgress,
@@ -505,5 +512,156 @@ describe('stretch and flow metrics', () => {
     assert.equal(highlights.averageStretchAndFlowBreathCount, 10)
     assert.equal(highlights.stretchAndFlowCarryoverItemCount, 1)
     assert.ok(highlights.stretchAndFlowCueAdherence !== null)
+  })
+})
+
+function pitchWork(patch: Partial<PitchWorkInput> = {}): PitchWorkInput {
+  return { highHz: null, lowHz: null, speakingRangeLowHz: null, ...patch }
+}
+
+function resonanceDetail(patch: Partial<ResonanceDetail> = {}): ResonanceDetail {
+  return { steps: [], comfortablePitchHz: null, sentenceIds: [], intonationRepetitions: null, ...patch }
+}
+
+function carryoverDetail(patch: Partial<CarryoverDetail> = {}): CarryoverDetail {
+  return { conversationCount: null, contextIds: [], customContext: '', warmedUpBefore: null, ...patch }
+}
+
+describe('resonance, carryover, and pitch metrics', () => {
+  it('splits resonance and carryover minutes into their own tracks', () => {
+    const mixed = session(localNoonIso(0), [
+      segment('resonance', { seconds: 300 }),
+      segment('carryover', { seconds: 600 }),
+    ])
+    const minutes = minutesByTrack(mixed)
+    assert.equal(minutes.resonance, 5)
+    assert.equal(minutes.carryover, 10)
+  })
+
+  it('summarizes resonance: sentences, ladder rung, pitch, and repetitions', () => {
+    const withDetail = session(localNoonIso(1), [
+      segment('resonance', {
+        seconds: 300,
+        resonance: resonanceDetail({
+          steps: [
+            { stepId: 'contrastResonance', completed: true },
+            { stepId: 'humming', completed: true },
+          ],
+          comfortablePitchHz: 180,
+          sentenceIds: ['maryMadeMeMad'],
+          intonationRepetitions: 3,
+        }),
+      }),
+    ])
+    const summary = resonanceSummary([withDetail])
+    assert.equal(summary.minutes, 5)
+    assert.equal(summary.sessionCount, 1)
+    assert.deepEqual(summary.sentenceIdsPractised, ['maryMadeMeMad'])
+    assert.equal(summary.latestTopStepId, 'humming')
+    assert.equal(summary.averageComfortablePitchHz, 180)
+    assert.equal(summary.totalIntonationRepetitions, 3)
+  })
+
+  it('reports the highest rung completed from the most recent session', () => {
+    const older = session(localNoonIso(2), [
+      segment('resonance', {
+        seconds: 60,
+        resonance: resonanceDetail({
+          steps: [
+            { stepId: 'contrastResonance', completed: true },
+            { stepId: 'intonation', completed: true },
+          ],
+        }),
+      }),
+    ])
+    const newer = session(localNoonIso(1), [
+      segment('resonance', {
+        seconds: 60,
+        resonance: resonanceDetail({ steps: [{ stepId: 'contrastResonance', completed: true }] }),
+      }),
+    ])
+    assert.equal(resonanceSummary([older, newer]).latestTopStepId, 'contrastResonance')
+  })
+
+  it('summarizes carryover: conversations, contexts, and warm-ups', () => {
+    const withDetail = session(localNoonIso(1), [
+      segment('carryover', {
+        seconds: 300,
+        carryover: carryoverDetail({ conversationCount: 2, contextIds: ['peerProgramming'], warmedUpBefore: true }),
+      }),
+    ])
+    const summary = carryoverSummary([withDetail])
+    assert.equal(summary.minutes, 5)
+    assert.equal(summary.conversationTotal, 2)
+    assert.deepEqual(summary.contextIdsUsed, ['peerProgramming'])
+    assert.equal(summary.warmedUpSessionCount, 1)
+  })
+
+  it('counts carryover conversations in the trailing week only', () => {
+    const recent = session(localNoonIso(1), [
+      segment('carryover', { seconds: 60, carryover: carryoverDetail({ conversationCount: 2 }) }),
+    ])
+    const old = session(localNoonIso(10), [
+      segment('carryover', { seconds: 60, carryover: carryoverDetail({ conversationCount: 3 }) }),
+    ])
+    assert.equal(carryoverConversationsThisWeek([recent, old], new Date()), 2)
+  })
+
+  it('reports the highest, lowest, and latest speaking-range low pitch', () => {
+    const older = session(localNoonIso(2), [
+      segment('glides', { seconds: 60, pitch: pitchWork({ highHz: 340, lowHz: 170, speakingRangeLowHz: 160 }) }),
+    ])
+    const newer = session(localNoonIso(1), [
+      segment('powerAscending', { seconds: 60, pitch: pitchWork({ highHz: 360, lowHz: 165, speakingRangeLowHz: 155 }) }),
+    ])
+    const pitch = pitchRangeSummary([older, newer])
+    assert.equal(pitch.highestHz, 360)
+    assert.equal(pitch.lowestHz, 165)
+    assert.equal(pitch.latestSpeakingRangeLowHz, 155)
+  })
+
+  it('extends protocol highlights with the resonance, carryover, and pitch fields', () => {
+    const withDetail = session(localNoonIso(1), [
+      segment('resonance', {
+        seconds: 300,
+        resonance: resonanceDetail({
+          steps: [{ stepId: 'contrastResonance', completed: true }],
+          comfortablePitchHz: 180,
+          sentenceIds: ['maryMadeMeMad'],
+        }),
+      }),
+      segment('carryover', {
+        seconds: 300,
+        carryover: carryoverDetail({ conversationCount: 2, contextIds: ['peerProgramming'] }),
+      }),
+      segment('glides', { seconds: 300, pitch: pitchWork({ highHz: 350, lowHz: 175 }) }),
+    ])
+    const highlights = protocolHighlights([withDetail])
+    assert.equal(highlights.resonanceMinutes, 5)
+    assert.equal(highlights.resonanceSessionCount, 1)
+    assert.equal(highlights.resonanceSentenceCount, 1)
+    assert.equal(highlights.resonanceTopStepId, 'contrastResonance')
+    assert.equal(highlights.averageResonancePitchHz, 180)
+    assert.equal(highlights.carryoverMinutes, 5)
+    assert.equal(highlights.carryoverConversationTotal, 2)
+    assert.equal(highlights.carryoverContextCount, 1)
+    assert.equal(highlights.highestPitchHz, 350)
+    assert.equal(highlights.lowestPitchHz, 175)
+  })
+
+  it('ignores drafts for the new metrics', () => {
+    const draft = session(
+      localNoonIso(1),
+      [segment('resonance', { seconds: 300, resonance: resonanceDetail({ sentenceIds: ['maryMadeMeMad'] }) })],
+      { status: 'draft' },
+    )
+    assert.equal(resonanceSummary([draft]).sessionCount, 0)
+    assert.equal(carryoverSummary([draft]).sessionCount, 0)
+  })
+
+  it('does not count a zero-minute part with nothing recorded', () => {
+    const empty = session(localNoonIso(1), [segment('resonance', { seconds: 0 }), segment('carryover', { seconds: 0 })])
+    assert.equal(resonanceSummary([empty]).sessionCount, 0)
+    assert.equal(carryoverSummary([empty]).sessionCount, 0)
   })
 })

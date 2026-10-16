@@ -3,21 +3,27 @@ import { api } from '../api'
 import { useSessionData } from '../sessionData'
 import { formatMinutes, formatPercent, formatRating, formatSigned } from '../format'
 import {
+  carryoverSummary,
   currentStretchAndFlowStage,
   currentStretchAndFlowStageLabel,
   effortShiftSummary,
   glideShareSummary,
   practiceStreakDays,
   protocolHighlights,
+  resonanceSummary,
   sessionTotalMinutes,
   sessionsInRange,
+  RESONANCE_SENTENCE_COUNT,
   STRETCH_AND_FLOW_CARRYOVER_CATALOG_SIZE,
   topTagsOfKind,
   trackProgress,
 } from '../../shared/metrics'
 import { buildCsvText } from '../../shared/csv'
 import {
+  CARRYOVER_CONTEXT_BY_ID,
   PRACTICE_TRACKS,
+  RESONANCE_SENTENCE_BY_ID,
+  RESONANCE_STEP_BY_ID,
   SEGMENT_DEFINITIONS,
   STRETCH_AND_FLOW_CARRYOVER_BY_ID,
   STRETCH_AND_FLOW_CARRYOVER_KIND_LABELS,
@@ -27,7 +33,7 @@ import {
   TRACK_DEFINITIONS,
   SEGMENT_TRACK,
 } from '../../shared/protocol'
-import { SESSION_ROLE_LABELS, TAG_KIND_LABELS, type Session, type Tag, type TagKind } from '../../shared/model'
+import { SESSION_ROLE_LABELS, TAG_KIND_LABELS, noteNameForHz, type Session, type Tag, type TagKind } from '../../shared/model'
 
 const RANGE_OPTIONS = [
   { days: 7, label: 'Last 7 days' },
@@ -80,6 +86,8 @@ export function ReportScreen() {
   const topTargets = topTagsOfKind(reportSessions, 'focus', tagByIdEntity, 6)
   const currentStage = currentStretchAndFlowStage(reportSessions)
   const currentStageLabel = currentStretchAndFlowStageLabel(reportSessions)
+  const resonance = resonanceSummary(reportSessions)
+  const carryoverDetails = carryoverSummary(reportSessions)
 
   const printReport = () => {
     window.print()
@@ -237,6 +245,34 @@ export function ReportScreen() {
               {highlights.stretchAndFlowCarryoverItemCount} of {STRETCH_AND_FLOW_CARRYOVER_CATALOG_SIZE} catalog items.
             </p>
             <p className="detail-text">
+              Resonance: {formatMinutes(highlights.resonanceMinutes)} across {highlights.resonanceSessionCount}{' '}
+              {highlights.resonanceSessionCount === 1 ? 'session' : 'sessions'}, ladder reached{' '}
+              {highlights.resonanceTopStepId
+                ? RESONANCE_STEP_BY_ID.get(highlights.resonanceTopStepId)?.label ?? highlights.resonanceTopStepId
+                : 'not recorded'}
+              , {highlights.resonanceSentenceCount} of {RESONANCE_SENTENCE_COUNT} sentences practised, average comfortable pitch{' '}
+              {highlights.averageResonancePitchHz === null
+                ? 'not recorded'
+                : `${Math.round(highlights.averageResonancePitchHz)} Hz`}
+              .
+            </p>
+            <p className="detail-text">
+              Carry-over: {carryoverDetails.conversationTotal} conversations across {carryoverDetails.sessionCount}{' '}
+              {carryoverDetails.sessionCount === 1 ? 'session' : 'sessions'}, {carryoverDetails.warmedUpSessionCount} with a
+              warm-up first.
+            </p>
+            <p className="detail-text">
+              Pitch: highest{' '}
+              {highlights.highestPitchHz === null
+                ? 'not recorded'
+                : `${highlights.highestPitchHz} Hz (${noteNameForHz(highlights.highestPitchHz)})`}
+              , lowest{' '}
+              {highlights.lowestPitchHz === null
+                ? 'not recorded'
+                : `${highlights.lowestPitchHz} Hz (${noteNameForHz(highlights.lowestPitchHz)})`}
+              .
+            </p>
+            <p className="detail-text">
               Endurance: {formatMinutes(highlights.enduranceMinutes)} total, longest single stretch{' '}
               {highlights.longestEnduranceMinutes === null ? 'not recorded' : formatMinutes(highlights.longestEnduranceMinutes)}.
             </p>
@@ -288,6 +324,18 @@ export function ReportScreen() {
                   : ''}
                 {segment.stretchAndFlow && segment.stretchAndFlow.cuesChecked.length > 0
                   ? `, cues ${segment.stretchAndFlow.cuesChecked.length}`
+                  : ''}
+                {segment.pitch?.highHz != null ? `, high ${segment.pitch.highHz} Hz` : ''}
+                {segment.pitch?.lowHz != null ? `, low ${segment.pitch.lowHz} Hz` : ''}
+                {segment.pitch?.speakingRangeLowHz != null ? `, speaking low ${segment.pitch.speakingRangeLowHz} Hz` : ''}
+                {segment.resonance && segment.resonance.steps.length > 0
+                  ? `, rungs ${segment.resonance.steps.filter((step) => step.completed).length}/${segment.resonance.steps.length}`
+                  : ''}
+                {segment.resonance && segment.resonance.sentenceIds.length > 0
+                  ? `, sentences ${segment.resonance.sentenceIds.length}`
+                  : ''}
+                {segment.carryover?.conversationCount != null
+                  ? `, conversations ${segment.carryover.conversationCount}`
                   : ''}
                 {segment.fatigueRating === null ? '' : `, fatigue ${segment.fatigueRating}`}
               </li>
@@ -396,6 +444,55 @@ function buildSlpCsvRows(sessions: readonly Session[], tagById: Map<string, Tag>
           (itemId) => STRETCH_AND_FLOW_CARRYOVER_BY_ID.get(itemId)?.text ?? itemId,
         )
         if (carryoverItems.length > 0) addRow('Carryover items', carryoverItems.join('; '), 'category', '')
+      }
+      if (segment.pitch) {
+        if (segment.pitch.highHz !== null) {
+          addRow('Pitch high', `${segment.pitch.highHz} Hz (${noteNameForHz(segment.pitch.highHz)})`, 'Hz', '')
+        }
+        if (segment.pitch.lowHz !== null) {
+          addRow('Pitch low', `${segment.pitch.lowHz} Hz (${noteNameForHz(segment.pitch.lowHz)})`, 'Hz', '')
+        }
+        if (segment.pitch.speakingRangeLowHz !== null) {
+          addRow(
+            'Speaking-range low note',
+            `${segment.pitch.speakingRangeLowHz} Hz (${noteNameForHz(segment.pitch.speakingRangeLowHz)})`,
+            'Hz',
+            '',
+          )
+        }
+      }
+      if (segment.resonance) {
+        const rungs = segment.resonance.steps
+          .filter((step) => step.completed)
+          .map((step) => RESONANCE_STEP_BY_ID.get(step.stepId)?.label ?? step.stepId)
+        if (rungs.length > 0) addRow('Resonance ladder', rungs.join('; '), 'category', '')
+        if (segment.resonance.comfortablePitchHz !== null) {
+          addRow(
+            'Resonance comfortable pitch',
+            `${segment.resonance.comfortablePitchHz} Hz (${noteNameForHz(segment.resonance.comfortablePitchHz)})`,
+            'Hz',
+            '',
+          )
+        }
+        const sentences = segment.resonance.sentenceIds.map(
+          (sentenceId) => RESONANCE_SENTENCE_BY_ID.get(sentenceId)?.text ?? sentenceId,
+        )
+        if (sentences.length > 0) addRow('Resonance sentences', sentences.join('; '), 'category', '')
+        if (segment.resonance.intonationRepetitions !== null) {
+          addRow('Resonance intonation repetitions', String(segment.resonance.intonationRepetitions), 'count', '')
+        }
+      }
+      if (segment.carryover) {
+        if (segment.carryover.conversationCount !== null) {
+          addRow('Carry-over conversations', String(segment.carryover.conversationCount), 'count', '')
+        }
+        const contexts = segment.carryover.contextIds.map(
+          (contextId) => CARRYOVER_CONTEXT_BY_ID.get(contextId)?.text ?? contextId,
+        )
+        if (contexts.length > 0) addRow('Carry-over context', contexts.join('; '), 'category', '')
+        if (segment.carryover.warmedUpBefore !== null) {
+          addRow('Warmed up before carry-over', segment.carryover.warmedUpBefore ? '1' : '0', 'yes/no', '')
+        }
       }
       if (segment.paceRating !== null) addRow('Endurance pace', String(segment.paceRating), '0-100', '')
       if (segment.fatigueRating !== null) addRow('Endurance fatigue', String(segment.fatigueRating), '0-100', '')
