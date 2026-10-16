@@ -1,9 +1,24 @@
 name: publish
 
+# Either a tag arrives (manual `npm run release:minor`, or a hand-pushed tag) or
+# release.yml calls this as a reusable workflow after it has tagged the merge.
+# The version is passed in explicitly in that second case, because a called
+# workflow keeps the caller's ref (`main`, not the new tag).
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, without the leading v (e.g. 0.4.0). Defaults to the ref's tag.
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: Version to publish, without the leading v (e.g. 0.4.0).
+        required: false
+        type: string
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -28,7 +43,7 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
       id-token: write
       attestations: write
@@ -41,6 +56,48 @@ jobs:
             dockerfile: Dockerfile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every tag is needed to tell whether this is the newest release.
+          fetch-depth: 0
+      - id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          version="$INPUT_VERSION"
+          # No input (a tag push or a bare dispatch): fall back to the ref's tag.
+          if [ -z "$version" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          if ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::Could not determine a version to publish (got '$version')."
+            exit 1
+          fi
+
+          rest="${version#*.}"
+          {
+            echo "version=$version"
+            echo "major=${version%%.*}"
+            echo "minor=${rest%%.*}"
+            echo "major_minor=${version%.*}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Publishing v$version"
+      - id: latest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # `latest` follows the newest release, not whoever ran last. Rebuilding
+          # an old tag republishes its own tags and leaves `latest` alone.
+          newest=$(git tag --sort=-v:refname --list 'v[0-9]*' | head -n1)
+          if [ -z "$newest" ] || [ "v$VERSION" = "$newest" ]; then
+            echo "is_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_latest=false" >> "$GITHUB_OUTPUT"
+            echo "v$VERSION is not the newest tag ($newest); leaving \`latest\` where it is."
+          fi
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # GITHUB_TOKEN is enough: no PAT and no repo secret to rotate.
@@ -53,10 +110,12 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          # Raw values rather than `type=semver`, which can only read the ref:
+          # a reusable-workflow call runs on `main`, not on the new tag.
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ steps.latest.outputs.is_latest }}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.major_minor }}
             type=sha,format=short
       - id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -77,3 +136,16 @@ jobs:
           subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+      # Last, so a failed build never leaves a Release announcing an image that
+      # does not exist. Idempotent: a re-run or a manual tag push is fine.
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already has a release."
+          else
+            gh release create "$TAG" --verify-tag --generate-notes --title "$TAG"
+          fi

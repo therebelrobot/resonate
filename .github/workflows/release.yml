@@ -1,0 +1,117 @@
+name: release
+
+# Merging a PR releases. The bump is read from the conventional-commit messages
+# that landed since the last v* tag, so there is nothing to run by hand.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Override the bump the commit messages imply.
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+# Two merges in quick succession would otherwise both read the same "last tag"
+# and try to cut the same version. Queue rather than cancel.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release: ${{ steps.bump.outputs.release }}
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          # The commit range and the newest-tag check both need history and tags.
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - id: bump
+        env:
+          FORCE_BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+
+          last_tag=$(git tag --sort=-v:refname --list 'v[0-9]*' | head -n1)
+          if [ -n "$last_tag" ]; then
+            range="${last_tag}..HEAD"
+          else
+            range="HEAD"
+          fi
+
+          # Subjects and bodies, merge commits included: they contribute nothing
+          # because they do not match a conventional-commit prefix.
+          log=$(git log --format='%s%n%b' "$range")
+
+          if grep -qE '(^[a-z]+(\([^)]*\))?!:)|(^BREAKING[ -]CHANGE:)' <<<"$log"; then
+            bump="major"
+          elif grep -qE '^feat(\([^)]*\))?:' <<<"$log"; then
+            bump="minor"
+          elif grep -qE '^(fix|perf)(\([^)]*\))?:' <<<"$log"; then
+            bump="patch"
+          else
+            bump="none"
+          fi
+
+          # chore:, docs:, ci:, style:, test: and build: deliberately fall through
+          # to `none`: a docs-only merge should not ship a release.
+          if [ -n "${FORCE_BUMP:-}" ] && [ "$FORCE_BUMP" != "auto" ]; then
+            echo "Overriding the commit-derived bump ($bump) with $FORCE_BUMP."
+            bump="$FORCE_BUMP"
+          fi
+
+          if [ "$bump" = none ]; then
+            echo "No release-worthy commits in ${range}; stopping."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          npm version "$bump" --no-git-tag-version --silent >/dev/null
+          version=$(node -p "require('./package.json').version")
+          echo "Cutting v${version} (${bump} bump)."
+          {
+            echo "release=true"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+      - name: Commit, tag, and push
+        if: steps.bump.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: release v${VERSION}"
+          git tag -a "v${VERSION}" -m "v${VERSION}"
+          # Atomic: the tag never lands without its version commit. Pushed with
+          # GITHUB_TOKEN, so it starts no further workflow run -- hence the
+          # explicit publish call below, which a tag push could not trigger.
+          git push --atomic origin HEAD:main "v${VERSION}"
+
+  publish:
+    needs: release
+    if: needs.release.outputs.release == 'true'
+    # Must cover everything the called workflow asks for; GITHUB_TOKEN is the
+    # intersection of the two.
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/publish.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
