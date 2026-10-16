@@ -19,7 +19,15 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8788',
+      // Anchor to a path boundary: a bare '/api' prefix also matches the client
+      // module '/api.ts', which would proxy the app's own source to the backend
+      // and blank the page. The regex matches '/api/...' and '/api' only.
+      '^/api(?:/|$)': {
+        // Keep the browser's Host so the server's same-origin check sees the
+        // Vite origin (http://localhost:5173), not the backend's.
+        target: 'http://localhost:8788',
+        changeOrigin: false,
+      },
     },
   },
 })
