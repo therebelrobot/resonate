@@ -77,8 +77,8 @@ export function TodayScreen() {
           {currentStage?.ratioLabel ? ` - ${currentStage.ratioLabel}` : ''}
           {highlights.stretchAndFlowPhaseChangeCount > 0
             ? ` (changed ${highlights.stretchAndFlowPhaseChangeCount} time${highlights.stretchAndFlowPhaseChangeCount === 1 ? '' : 's'} so far).`
-            : currentStageKey === null || currentStageKey === 'airOnly'
-              ? ' (the Air Only foundation is the starting point in the plan).'
+            : currentStageKey === null || currentStageKey === 'phase1'
+              ? ' (Phase 1, the Air Only starting point, is where the plan begins).'
               : ' (no phase changes logged yet).'}
         </p>
         {latestStretchDetail && latestStretchDetail.steps.length > 0 && (

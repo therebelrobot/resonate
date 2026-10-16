@@ -44,14 +44,23 @@ describe('stretch and flow protocol integrity', () => {
     assert.equal(STRETCH_AND_FLOW_PHASE_COUNT, 4)
   })
 
-  it('marks Phase 2 and Phase 3 as steps-not-printed with a null ratio', () => {
-    for (const stageId of ['phase2', 'phase3']) {
-      const stage = STRETCH_AND_FLOW_STAGES.find((candidate) => candidate.id === stageId)
+  it('gives Phase 1-3 the five-step shape and only Phase 4 the not-printed guidance', () => {
+    const byId = new Map(STRETCH_AND_FLOW_STAGES.map((stage) => [stage.id, stage]))
+    assert.equal(byId.get('phase1')?.ratio, 'airOnly')
+    assert.equal(byId.get('phase2')?.ratio, 'twentyEighty')
+    assert.equal(byId.get('phase3')?.ratio, 'fiftyFifty')
+    for (const stageId of ['phase1', 'phase2', 'phase3']) {
+      const stage = byId.get(stageId)
       assert.ok(stage, `expected a stage ${stageId}`)
-      assert.equal(stage.stepsNotPrinted, true)
-      assert.equal(stage.ratio, null)
-      assert.equal(stage.stepIds.length, 0)
+      assert.equal(stage.stepsNotPrinted, false)
+      assert.equal(stage.stepIds.length, STRETCH_AND_FLOW_STEPS.length)
     }
+    const phase4 = byId.get('phase4')
+    assert.ok(phase4, 'expected a stage phase4')
+    assert.equal(phase4.stepsNotPrinted, true)
+    assert.equal(phase4.ratio, null)
+    assert.equal(phase4.stepIds.length, 0)
+    assert.ok(phase4.guidance.length > 0, 'expected Phase 4 to carry progression guidance')
   })
 
   it('covers every carryover kind in the catalog', () => {

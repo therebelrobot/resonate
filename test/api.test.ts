@@ -271,9 +271,9 @@ describe('sessions', () => {
     payload.segments[1] = {
       ...payload.segments[1],
       kind: 'stretchAndFlow',
-      phaseNumber: 1,
+      phaseNumber: 2,
       stretchAndFlow: {
-        stageId: 'phase1',
+        stageId: 'phase2',
         ratio: 'twentyEighty',
         usedTissue: true,
         steps: [{ stepId: 'oneNumber', completed: true, breathCount: 10 }],
@@ -287,7 +287,7 @@ describe('sessions', () => {
     const created = await readJson<Session>(response)
     const stretch = created.segments.find((segment) => segment.kind === 'stretchAndFlow')
     assert.ok(stretch)
-    assert.equal(stretch.stretchAndFlow?.stageId, 'phase1')
+    assert.equal(stretch.stretchAndFlow?.stageId, 'phase2')
     assert.equal(stretch.stretchAndFlow?.ratio, 'twentyEighty')
     assert.equal(stretch.stretchAndFlow?.steps[0]?.breathCount, 10)
     assert.deepEqual(stretch.stretchAndFlow?.carryover?.itemIds, ['free'])

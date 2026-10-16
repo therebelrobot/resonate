@@ -14,7 +14,7 @@ function segment(patch: Partial<SessionSegmentInput> = {}): SessionSegmentInput 
 }
 
 const FULL_DETAIL: StretchAndFlowDetail = {
-  stageId: 'phase1',
+  stageId: 'phase2',
   ratio: 'twentyEighty',
   usedTissue: true,
   steps: [{ stepId: 'oneNumber', completed: true, breathCount: 10 }],
@@ -29,7 +29,7 @@ const invalidDetail = (patch: Record<string, unknown>): StretchAndFlowDetail =>
 
 describe('stretch and flow schema', () => {
   it('accepts a full detail object', () => {
-    assert.equal(sessionSegmentInputSchema.safeParse(segment({ phaseNumber: 1, stretchAndFlow: FULL_DETAIL })).success, true)
+    assert.equal(sessionSegmentInputSchema.safeParse(segment({ phaseNumber: 2, stretchAndFlow: FULL_DETAIL })).success, true)
   })
 
   it('accepts a null detail', () => {
@@ -59,13 +59,13 @@ describe('stretch and flow schema', () => {
 
   it('rejects a ratio that does not match the selected stage', () => {
     const result = sessionSegmentInputSchema.safeParse(
-      segment({ phaseNumber: 1, stretchAndFlow: invalidDetail({ ratio: 'fiftyFifty' }) }),
+      segment({ phaseNumber: 2, stretchAndFlow: invalidDetail({ ratio: 'fiftyFifty' }) }),
     )
     assert.equal(result.success, false)
   })
 
   it('rejects a phase number that does not match the selected stage', () => {
-    const result = sessionSegmentInputSchema.safeParse(segment({ phaseNumber: 2, stretchAndFlow: FULL_DETAIL }))
+    const result = sessionSegmentInputSchema.safeParse(segment({ phaseNumber: 3, stretchAndFlow: FULL_DETAIL }))
     assert.equal(result.success, false)
   })
 

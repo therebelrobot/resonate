@@ -94,7 +94,7 @@ export function ProtocolScreen() {
           {STRETCH_AND_FLOW_STAGES.map((stage) => (
             <li key={stage.id}>
               <strong>{stage.label}</strong>
-              {stage.ratioLabel ? ` - ${stage.ratioLabel}` : ' - voicing ratio not printed in the handout'}
+              {stage.ratioLabel ? ` - ${stage.ratioLabel}` : ' - progression guidance (no voicing ratio)'}
               {stage.tissue === 'required'
                 ? ' - tissue: still with tissue'
                 : stage.tissue === 'optional'

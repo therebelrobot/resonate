@@ -81,7 +81,7 @@ export interface StretchAndFlowDetail {
   steps: StretchAndFlowStepProgress[]
   /** Cue ids checked this session, from STRETCH_AND_FLOW_CUES. */
   cuesChecked: string[]
-  /** Phase 4 only: did the user toggle air-only and voiced productions. */
+  /** Phase 1 and Phase 2: did the user toggle air-only and voiced productions (the handout's "Toggle 1 & 2"). */
   toggledAirOnlyAndVoiced: boolean | null
   carryover: StretchAndFlowCarryoverLog | null
 }

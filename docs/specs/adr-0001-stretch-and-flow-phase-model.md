@@ -1,6 +1,6 @@
 # ADR-0001 — Stretch and Flow phase model
 
-Status: Proposed
+Status: Superseded by [ADR-0002](adr-0002-stretch-and-flow-phase-correction.md) (2026-10-15) — the "Air Only foundation" premise below was based on a bad extraction; Air Only is Phase 1.
 Date: 2026-10-08
 Related: [`docs/specs/stretch-and-flow.md`](stretch-and-flow.md) §4.2
 

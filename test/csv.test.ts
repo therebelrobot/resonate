@@ -158,9 +158,9 @@ describe('session CSV export', () => {
         session('2026-01-15T03:00:00.000Z', [
           segment('stretchAndFlow', {
             seconds: 300,
-            phaseNumber: 1,
+            phaseNumber: 2,
             stretchAndFlow: {
-              stageId: 'phase1',
+              stageId: 'phase2',
               ratio: 'twentyEighty',
               usedTissue: true,
               steps: [{ stepId: 'oneNumber', completed: true, breathCount: 10 }],
@@ -185,7 +185,7 @@ describe('session CSV export', () => {
     assert.equal(headerColumns.indexOf('Stretch and Flow Stage'), 36)
     assert.equal(headerColumns.indexOf('Carryover Items'), 43)
     const row = lines[1]!
-    assert.ok(row.includes('Phase 1'))
+    assert.ok(row.includes('Phase 2'))
     assert.ok(row.includes('20% sound / 80% air'))
     assert.ok(row.includes('1/1'))
     assert.ok(row.includes('Vowels elongated'))

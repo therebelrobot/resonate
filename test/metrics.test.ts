@@ -283,10 +283,10 @@ function sfDetail(patch: Partial<StretchAndFlowDetail> = {}): StretchAndFlowDeta
 describe('stretch and flow metrics', () => {
   it('builds contiguous phase spans oldest first', () => {
     const first = session(localNoonIso(3), [
-      segment('stretchAndFlow', { seconds: 300, phaseNumber: 1, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'twentyEighty' }) }),
+      segment('stretchAndFlow', { seconds: 300, phaseNumber: 1, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'airOnly' }) }),
     ])
     const second = session(localNoonIso(2), [
-      segment('stretchAndFlow', { seconds: 300, phaseNumber: 1, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'twentyEighty' }) }),
+      segment('stretchAndFlow', { seconds: 300, phaseNumber: 1, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'airOnly' }) }),
     ])
     const third = session(localNoonIso(1), [
       segment('stretchAndFlow', { seconds: 600, phaseNumber: 2, stretchAndFlow: sfDetail({ stageId: 'phase2' }) }),
@@ -309,10 +309,10 @@ describe('stretch and flow metrics', () => {
 
   it('breaks down minutes and sessions by ratio', () => {
     const a = session(localNoonIso(2), [
-      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'twentyEighty' }) }),
+      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'phase2', ratio: 'twentyEighty' }) }),
     ])
     const b = session(localNoonIso(1), [
-      segment('stretchAndFlow', { seconds: 600, stretchAndFlow: sfDetail({ stageId: 'phase4', ratio: 'fiftyFifty' }) }),
+      segment('stretchAndFlow', { seconds: 600, stretchAndFlow: sfDetail({ stageId: 'phase3', ratio: 'fiftyFifty' }) }),
     ])
     const breakdown = stretchAndFlowRatioBreakdown([a, b])
     assert.equal(breakdown.minutesByRatio.twentyEighty, 5)
@@ -388,7 +388,7 @@ describe('stretch and flow metrics', () => {
   it('ignores drafts', () => {
     const draft = session(
       localNoonIso(1),
-      [segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'twentyEighty' }) })],
+      [segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'airOnly' }) })],
       { status: 'draft' },
     )
     assert.equal(stretchAndFlowPhaseTimeline([draft]).length, 0)
@@ -426,23 +426,23 @@ describe('stretch and flow metrics', () => {
 
   it('counts a zero-minute Stretch part that has a recorded detail', () => {
     const recorded = session(localNoonIso(1), [
-      segment('stretchAndFlow', { seconds: 0, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'twentyEighty' }) }),
+      segment('stretchAndFlow', { seconds: 0, stretchAndFlow: sfDetail({ stageId: 'phase2', ratio: 'twentyEighty' }) }),
     ])
     assert.equal(protocolHighlights([recorded]).stretchAndFlowSessionCount, 1)
   })
 
   it('reports the current stage, preferring the recorded stage over the phase number', () => {
-    const airOnly = session(localNoonIso(1), [
-      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'airOnly', ratio: 'airOnly' }) }),
+    const phase1 = session(localNoonIso(1), [
+      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'airOnly' }) }),
     ])
-    assert.equal(currentStretchAndFlowStage([airOnly])?.id, 'airOnly')
+    assert.equal(currentStretchAndFlowStage([phase1])?.id, 'phase1')
     const legacy = session(localNoonIso(1), [segment('stretchAndFlow', { seconds: 300, phaseNumber: 2 })])
     assert.equal(currentStretchAndFlowStage([legacy])?.id, 'phase2')
   })
 
   it('prefers a newer legacy phase over an older recorded stage', () => {
     const olderRecorded = session(localNoonIso(2), [
-      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'twentyEighty' }) }),
+      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'phase2', ratio: 'twentyEighty' }) }),
     ])
     const newerLegacy = session(localNoonIso(1), [segment('stretchAndFlow', { seconds: 300, phaseNumber: 7 })])
     assert.equal(currentStretchAndFlowStageKey([olderRecorded, newerLegacy]), 'legacy-phase-7')
@@ -454,25 +454,25 @@ describe('stretch and flow metrics', () => {
     assert.equal(currentStretchAndFlowStageLabel([legacy]), 'Phase 7 (not in the current handout)')
     const inSet = session(localNoonIso(1), [segment('stretchAndFlow', { seconds: 300, phaseNumber: 2 })])
     assert.equal(currentStretchAndFlowStageLabel([inSet]), 'Phase 2')
-    const airOnly = session(localNoonIso(1), [
-      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'airOnly', ratio: 'airOnly' }) }),
+    const phase1 = session(localNoonIso(1), [
+      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'airOnly' }) }),
     ])
-    assert.equal(currentStretchAndFlowStageLabel([airOnly]), 'Air Only')
+    assert.equal(currentStretchAndFlowStageLabel([phase1]), 'Phase 1')
     assert.equal(currentStretchAndFlowStageLabel([]), 'Phase 1')
   })
 
-  it('counts a change from the Air Only foundation to Phase 1', () => {
-    const airOnly = session(localNoonIso(2), [
-      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'airOnly', ratio: 'airOnly' }) }),
+  it('counts a change from Phase 1 (Air Only) to Phase 2', () => {
+    const phase1 = session(localNoonIso(2), [
+      segment('stretchAndFlow', { seconds: 300, stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'airOnly' }) }),
     ])
-    const phase1 = session(localNoonIso(1), [
+    const phase2 = session(localNoonIso(1), [
       segment('stretchAndFlow', {
         seconds: 300,
-        phaseNumber: 1,
-        stretchAndFlow: sfDetail({ stageId: 'phase1', ratio: 'twentyEighty' }),
+        phaseNumber: 2,
+        stretchAndFlow: sfDetail({ stageId: 'phase2', ratio: 'twentyEighty' }),
       }),
     ])
-    assert.equal(protocolHighlights([airOnly, phase1]).stretchAndFlowPhaseChangeCount, 1)
+    assert.equal(protocolHighlights([phase1, phase2]).stretchAndFlowPhaseChangeCount, 1)
   })
 
   it('does not count a change when the stage never changes', () => {

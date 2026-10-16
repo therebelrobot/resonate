@@ -17,10 +17,10 @@ The handout file [`docs/reference/Stretch & Flow.pdf`](../reference/Stretch%20%2
 |---|---|
 | True page count of the handout | 2 pages (printed labels "Page 7" and "Page 9") |
 | Content of printed pages 1–6, 8, 10+ | Not present in this file |
-| Phase 2 step sequence | Heading present on page 7; steps not printed on that page |
-| Phase 2 voicing ratio | Not printed — unknown |
-| Phase 3 voicing ratio | Not printed — Phase 3 is progression guidance, not a step list |
-| Whether "Air Only" is a numbered phase or a pre-phase foundation | Interpreted as a foundation stage (see §2.2) |
+| Phase 2 step sequence | Printed on page 7; confirmed from page-7 screenshots (ADR-0002) |
+| Phase 2 voicing ratio | 20% sound / 80% air |
+| Phase 3 voicing ratio | 50% sound / 50% air |
+| Whether "Air Only" is a numbered phase or a pre-phase foundation | It is Phase 1 (ADR-0002) |
 
 Nothing in §3–§11 depends on the missing pages.
 
@@ -78,25 +78,24 @@ Everything in this section is transcribed from the extractable pages. Wording is
 
 ### 2.2 Stages, ratios, and tissue state
 
-The handout presents an **Air Only** foundation section, then numbered **Phase 1–4**. We model these as five ordered *stages*; only the numbered ones carry a `phaseNumber`.
+The handout prints **four numbered phases** on page 7. Phase 1 is the **Air Only** foundation; Phases 2 and 3 add voicing; Phase 4 is progression guidance. (Corrected 2026-10-15 from page-7 screenshots; see ADR-0002.)
 
 | Stage id | Label | Voicing ratio | Tissue | Source |
 |---|---|---|---|---|
-| `airOnly` | Air Only | Air only (derived; the handout does not print a percentage) | Yes — "Blow the tissue 5-7 times" | page 7, lines 8–19 |
-| `phase1` | Phase 1 | 20% sound / 80% air | Yes — "still with tissue" | page 7, lines 20–32 |
-| `phase2` | Phase 2 | **[not printed]** | **[not printed]** | page 7, line 33 (heading only) |
-| `phase3` | Phase 3 | **[not printed]** — progression guidance, not a step list | Optional — "consider dropping the tissue" | page 7, lines 34–49 |
-| `phase4` | Phase 4 | 50% sound / 50% air | Yes — "still with tissue" | page 7, lines 50–78 |
+| `phase1` | Phase 1 | Air only (derived; the handout does not print a percentage) | Yes — "Blow the tissue 5-7 times" | page 7 |
+| `phase2` | Phase 2 | 20% sound / 80% air | Yes — "still with tissue" | page 7 |
+| `phase3` | Phase 3 | 50% sound / 50% air | Yes — "still with tissue" | page 7 |
+| `phase4` | Phase 4 | **[not printed]** — progression guidance, not a step list | Optional — "consider dropping the tissue" | page 7 |
 
 ### 2.3 The 5-step exercise shape (per stage)
 
-Air Only, Phase 1, and Phase 4 each print the **same five-step shape**, differing only in the ratio prefix and the first step's tissue instruction. Phase 2's steps are **[not printed]**; Phase 3 is guidance, not a step list.
+Phase 1 (Air Only), Phase 2, and Phase 3 each print the **same five-step shape**, differing only in the ratio prefix and the first step's tissue instruction. Phase 4 is guidance, not a step list.
 
 | Step id | Step 1 (open throat) | Step 2 | Step 3 | Step 4 | Step 5 |
 |---|---|---|---|---|---|
-| Air Only | open throat on "oooo" vowel → Blow the tissue 5–7 times | One number per breath, count 2–10, elongate vowels | Two numbers per breath, count 1–10, elongate vowels | Three numbers per breath, count 1–9 | Five numbers per breath, count 1–10 |
-| Phase 1 | 20% sound/80% air, open throat on "oooo" vowel (still with tissue) | 20% sound/80% air, one number per breath, count 2–10, elongate vowels | 20% sound/80% air, two numbers per breath, count 1–10, elongate vowels | 20% sound/80% air, three numbers per breath, count 1–9 | 20% sound/80% air, five numbers per breath, count 1–10 |
-| Phase 4 | 50% sound/50% air, open throat on "oooo" vowel (still with tissue) | 50% sound/50% air, one number per breath, count 2–10, elongate vowels | 50% sound/50% air, two numbers per breath, count 1–10, elongate vowels | 50% sound/50% air, three numbers per breath, count 1–9 | 50% sound/50% air, five numbers per breath, count 1–10 |
+| Phase 1 (Air Only) | open throat on "oooo" vowel → Blow the tissue 5–7 times | One number per breath, count 2–10, elongate vowels | Two numbers per breath, count 1–10, elongate vowels | Three numbers per breath, count 1–9 | Five numbers per breath, count 1–10 |
+| Phase 2 | 20% sound/80% air, open throat on "oooo" vowel (still with tissue) | 20% sound/80% air, one number per breath, count 2–10, elongate vowels | 20% sound/80% air, two numbers per breath, count 1–10, elongate vowels | 20% sound/80% air, three numbers per breath, count 1–9 | 20% sound/80% air, five numbers per breath, count 1–10 |
+| Phase 3 | 50% sound/50% air, open throat on "oooo" vowel (still with tissue) | 50% sound/50% air, one number per breath, count 2–10, elongate vowels | 50% sound/50% air, two numbers per breath, count 1–10, elongate vowels | 50% sound/50% air, three numbers per breath, count 1–9 | 50% sound/50% air, five numbers per breath, count 1–10 |
 
 Canonical step ids (stable, used by the data model in §3):
 
@@ -118,7 +117,7 @@ Canonical step ids (stable, used by the data model in §3):
 | `catchBreath` | Take time between productions to catch breath | lines 64–66 |
 | `preventDizziness` | TIPS: This is to prevent dizziness | lines 79–80 |
 
-### 2.5 Phase 3 progression guidance (page 7, lines 35–49)
+### 2.5 Phase 4 progression guidance (page 7)
 
 | Id | Text (verbatim) |
 |---|---|
@@ -230,7 +229,7 @@ export interface StretchAndFlowDetail {
   steps: StretchAndFlowStepProgress[]
   /** Cue ids checked this session, from STRETCH_AND_FLOW_CUES. */
   cuesChecked: string[]
-  /** Phase 4 only: did the user toggle air-only and voiced productions. */
+  /** Phase 1 and Phase 2: did the user toggle air-only and voiced productions ("Toggle 1 & 2"). */
   toggledAirOnlyAndVoiced: boolean | null
   carryover: StretchAndFlowCarryoverLog | null
 }
@@ -319,13 +318,13 @@ export const STRETCH_AND_FLOW_PACING: readonly { id: string; text: string }[] = 
 
 ### 4.2 Phase count conflict — `MAX_STRETCH_AND_FLOW_PHASE = 50`
 
-The PDF defines **four numbered phases** (plus the Air Only foundation). The code allows `1..50` ([`shared/protocol.ts:217`](../../shared/protocol.ts:217), [`server/schemas.ts:29`](../../server/schemas.ts:29)).
+The PDF defines **four numbered phases** (Phase 1 is Air Only). The code allows `1..50` ([`shared/protocol.ts:217`](../../shared/protocol.ts:217), [`server/schemas.ts:29`](../../server/schemas.ts:29)).
 
 **Decision (see ADR-0001):** treat **4 as the canonical numbered-phase set** while remaining **tolerant of stored higher values**.
 
 - Add `LAST_STRETCH_AND_FLOW_PHASE = 4` and `STRETCH_AND_FLOW_PHASE_COUNT = 4` as the canonical set.
 - Keep `MAX_STRETCH_AND_FLOW_PHASE = 50` as a **storage tolerance** so existing sessions with values > 4 still load and validate. Do not reject them.
-- The editor offers only the canonical stages (Air Only + Phase 1–4). A stored value > 4 is displayed read-only as "Phase N (not in the current handout)" and is not selectable.
+- The editor offers only the canonical stages (Phase 1–4). A stored value > 4 is displayed read-only as "Phase N (not in the current handout)" and is not selectable.
 - Rationale: rejecting stored values would break existing sessions (a one-way door on user data); silently clamping would falsify history. Tolerance preserves both.
 
 ### 4.3 Ratio ↔ stage consistency
@@ -465,12 +464,12 @@ The new fields are health data (speech-therapy protocol detail). They stay insid
 
 Replace the current Phase number field + single slider with a guided flow:
 
-1. **Stage selector** — a native radio group of the canonical stages (Air Only, Phase 1–4) from `STRETCH_AND_FLOW_STAGES`. Selecting a stage sets `stageId`, `phaseNumber` (for numbered stages), and `ratio`. A stored phase > 4 renders as a disabled radio labelled "Phase N (not in the current handout)".
-2. **Ratio + tissue summary** — read-only text derived from the stage ("20% sound / 80% air · tissue: still with tissue"). For Phase 2/3, show "steps not printed in the handout" instead of inventing content.
+1. **Stage selector** — a native radio group of the canonical stages (Phase 1–4) from `STRETCH_AND_FLOW_STAGES`. Selecting a stage sets `stageId`, `phaseNumber` (for numbered stages), and `ratio`. A stored phase > 4 renders as a disabled radio labelled "Phase N (not in the current handout)".
+2. **Ratio + tissue summary** — read-only text derived from the stage ("20% sound / 80% air · tissue: still with tissue"). For Phase 4, show the guidance instead of inventing a ratio.
 3. **Step checklist** — one row per `STRETCH_AND_FLOW_STEPS` entry, each with a checkbox (`completed`) and a breath-count number input (`breathCount`), pre-filled with the step's count range as a hint. For stages with `stepsNotPrinted`, show the guidance text instead of the checklist.
 4. **Cue checklist** — checkboxes for `STRETCH_AND_FLOW_CUES`, bound to `cuesChecked`.
 5. **Pacing/safety callout** — render `STRETCH_AND_FLOW_PACING` as a visible list (not a tooltip), including the dizziness tip.
-6. **Phase 4 toggle** — when `stageId === 'phase4'`, show a checkbox for `toggledAirOnlyAndVoiced`.
+6. **Phase 1/2 toggle** — when `stageId` is `phase1` or `phase2`, show a checkbox for `toggledAirOnlyAndVoiced` (the handout's "Toggle 1 & 2").
 7. **Carryover** — a kind selector plus a multi-select of catalog items for that kind, and a free-text field for `customText` (daily phrases / how-to / conversation topics).
 8. **Coordination slider** — keep the existing `coordinationRating` slider ([`client/screens/SessionEditor.tsx:409-414`](../../client/screens/SessionEditor.tsx:409)) unchanged.
 9. **Notes** — keep the existing notes field.
@@ -557,7 +556,7 @@ This is a speech-therapy context; the repo's inclusive-software rules and WCAG 2
 
 ### 10.3 New UI tests
 
-- **SessionEditor**: selecting a stage sets ratio and phase; Phase 2/3 show "steps not printed"; Phase 4 shows the toggle; cue checklist persists; carryover selection persists; keyboard-only completion.
+- **SessionEditor**: selecting a stage sets ratio and phase; Phase 4 shows "steps not printed"; Phase 1/2 show the toggle; cue checklist persists; carryover selection persists; keyboard-only completion.
 - **TodayScreen**: shows today's stage and checklist progress.
 - **InsightsScreen**: renders the phase timeline, ratio breakdown, breath-count trend, cue adherence, and carryover progress with text labels (no color-only).
 - **Accessibility**: axe-core passes on the editor, Today, and Insights; manual screen-reader pass on the editor.
@@ -573,7 +572,7 @@ Small, reviewable stories. Contracts first (RRF: contracts before concurrency), 
 3. **Validation** — add the §6.1 zod schemas to `server/schemas.ts`; add schema unit tests.
 4. **Persistence normalization** — apply `normalizeSegmentInput` in `SessionRepository.listAll`/`get`; add a legacy-row round-trip test.
 5. **Metrics** — add the §5 functions and extend `ProtocolHighlights`; add unit tests.
-6. **SessionEditor** — guided stage selector, step checklist, cue checklist, pacing callout, Phase 4 toggle, carryover inputs; keep coordination slider and notes.
+6. **SessionEditor** — guided stage selector, step checklist, cue checklist, pacing callout, Phase 1/2 toggle, carryover inputs; keep coordination slider and notes.
 7. **SessionDetailScreen** — render the new fields.
 8. **TodayScreen** — today's stage + checklist progress.
 9. **InsightsScreen** — phase timeline, ratio breakdown, breath-count trend, cue adherence, carryover progress.
@@ -581,7 +580,7 @@ Small, reviewable stories. Contracts first (RRF: contracts before concurrency), 
 11. **ReportScreen + browser CSV** — extend the report paragraph, per-session list, and long-format rows.
 12. **Server CSV** — append the new columns; update `PART_COLUMN_COUNT`; update `test/csv.test.ts`.
 13. **Accessibility pass** — axe-core in CI, screen-reader pass, contrast/target-size checks on the new UI.
-14. **Reconcile PDF** — if a full extractor becomes available, re-run §0 and update §2 (Phase 2 steps, Phase 3 ratio, true page count).
+14. **Reconcile PDF** — phase numbering reconciled against page-7 screenshots (ADR-0002); if a full extractor becomes available, re-run §0 and update §2 for the remaining printed pages.
 
 Deploy ≠ launch: ship behind the existing app (no feature flag infrastructure exists in this repo); the new fields are additive and dormant until the editor writes them, so old sessions are unaffected.
 

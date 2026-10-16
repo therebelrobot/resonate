@@ -91,7 +91,7 @@ export const SEGMENT_DEFINITIONS: Record<SegmentKind, SegmentDefinition> = {
     summary: 'Five to ten minutes on whichever phase you are on.',
     stepTitle: 'Stretch and Flow',
     guidance: [
-      'Start with the Air Only foundation, then work through Phase 1 to Phase 4.',
+      'Start with Phase 1 (Air Only), then work through to Phase 4.',
       'Each stage has its own voicing ratio and a five-step shape; the Stretch step shows them.',
       'Whatever stage you are on is the one to practice.',
       'Ask your SLP at the next session what moves you to the next phase.',
@@ -171,7 +171,7 @@ export const TRACK_DEFINITIONS: Record<PracticeTrack, TrackDefinition> = {
     cadenceNote: 'Practice for 5-10 minutes a day.',
     goalNote: null,
     guidance: [
-      'Start with the Air Only foundation, then work through Phase 1 to Phase 4.',
+      'Start with Phase 1 (Air Only), then work through to Phase 4.',
       'Practice whichever stage you are on.',
       'Your SLP will say what moves you to the next stage.',
     ],
@@ -230,14 +230,20 @@ export const STRETCH_AND_FLOW_PHASE_COUNT = 4
 
 // ---------------------------------------------------------------------------
 // Stretch and Flow protocol content, transcribed from the handout
-// (docs/reference/Stretch & Flow.pdf, pages 7 and 9). Wording is preserved;
-// only obvious line-wrap artifacts are joined. Anything the handout does not
-// print is marked [not printed] and left null/empty rather than invented.
+// (docs/reference/Stretch & Flow.pdf, pages 7 and 9; page-7 screenshots in
+// docs/REFERENCE/). Wording is preserved; only obvious line-wrap artifacts are
+// joined. Anything the handout does not print is marked [not printed] and left
+// null/empty rather than invented.
 //
-// TODO (spec 11.14): reconcile against the PDF if a full extractor becomes
-// available. Still missing: the content of printed pages 1-6/8/10+, Phase 2's
-// step sequence, and Phase 2/3's voicing ratios. (The file's true page count is
-// known - 2 pages, spec 0 - so it is not listed here.)
+// Corrected 2026-10-15 against screenshots of page 7 (ADR-0002): the original
+// extraction read the multi-column page linearly and shifted every phase down
+// by one, inventing a separate "Air Only foundation" and leaving the real
+// Phase 2 empty. The handout prints Phase 1 as Air Only, Phase 2 as 20% sound /
+// 80% air, Phase 3 as 50% sound / 50% air, and Phase 4 as progression guidance.
+//
+// TODO (spec 11.14): reconcile the remaining printed pages 1-6/8/10+ if a full
+// extractor becomes available. (The file's true page count is known - 2 pages,
+// spec 0 - so it is not listed here.)
 //
 // The ratio and carryover-kind unions live here (not in model.ts) because the
 // stage and carryover-item types below need them, and model.ts already imports
@@ -335,8 +341,8 @@ export const STRETCH_AND_FLOW_STEPS: readonly StretchAndFlowStep[] = [
   },
 ]
 
-/** Phase 3 progression guidance (page 7, lines 35-49). */
-export const STRETCH_AND_FLOW_PHASE3_GUIDANCE: readonly string[] = [
+/** Phase 4 progression and carryover guidance (page 7). */
+export const STRETCH_AND_FLOW_PHASE4_GUIDANCE: readonly string[] = [
   'Can do months of the year, days of the week in either Phase 1 or Phase 2 positions.',
   "If you haven't already, consider dropping the tissue as the visual feedback and allow the patient to rely on their motor memory.",
   'Carryover into an appropriate sounding voice that is not too breathy, but remains supported and open is key.',
@@ -344,11 +350,11 @@ export const STRETCH_AND_FLOW_PHASE3_GUIDANCE: readonly string[] = [
   'Carrying this over into phrases that the patient uses daily, How-to stories that the patient recites (like how to build a snowman or how to make a sandwich) and then in conversational opportunities will be most applicable.',
 ]
 
-/** Ordered stages: the Air Only foundation, then numbered Phase 1-4 (page 7). */
+/** Ordered stages: the four numbered phases (page 7). Phase 1 is Air Only. */
 export interface StretchAndFlowStage {
   id: string
   label: string
-  /** Numbered phases only; null for the Air Only foundation. */
+  /** The phase number from the handout (1-4); null for a legacy row with none. */
   phaseNumber: number | null
   ratio: StretchAndFlowRatio | null
   ratioLabel: string | null
@@ -364,23 +370,12 @@ const ALL_STEP_IDS: readonly string[] = STRETCH_AND_FLOW_STEPS.map((step) => ste
 
 export const STRETCH_AND_FLOW_STAGES: readonly StretchAndFlowStage[] = [
   {
-    id: 'airOnly',
-    label: 'Air Only',
-    phaseNumber: null,
-    ratio: 'airOnly',
-    // The handout does not print a percentage for Air Only; this label is derived.
-    ratioLabel: 'Air only',
-    tissue: 'required',
-    stepIds: ALL_STEP_IDS,
-    guidance: [],
-    stepsNotPrinted: false,
-  },
-  {
     id: 'phase1',
     label: 'Phase 1',
     phaseNumber: 1,
-    ratio: 'twentyEighty',
-    ratioLabel: '20% sound / 80% air',
+    ratio: 'airOnly',
+    // The handout does not print a percentage for Phase 1 (Air Only); this label is derived.
+    ratioLabel: 'Air only',
     tissue: 'required',
     stepIds: ALL_STEP_IDS,
     guidance: [],
@@ -390,36 +385,35 @@ export const STRETCH_AND_FLOW_STAGES: readonly StretchAndFlowStage[] = [
     id: 'phase2',
     label: 'Phase 2',
     phaseNumber: 2,
-    // [not printed] - the handout prints the heading only.
-    ratio: null,
-    ratioLabel: null,
-    tissue: 'unknown',
-    stepIds: [],
+    ratio: 'twentyEighty',
+    ratioLabel: '20% sound / 80% air',
+    tissue: 'required',
+    stepIds: ALL_STEP_IDS,
     guidance: [],
-    stepsNotPrinted: true,
+    stepsNotPrinted: false,
   },
   {
     id: 'phase3',
     label: 'Phase 3',
     phaseNumber: 3,
-    // [not printed] - Phase 3 is progression guidance, not a step list.
-    ratio: null,
-    ratioLabel: null,
-    tissue: 'optional',
-    stepIds: [],
-    guidance: STRETCH_AND_FLOW_PHASE3_GUIDANCE,
-    stepsNotPrinted: true,
-  },
-  {
-    id: 'phase4',
-    label: 'Phase 4',
-    phaseNumber: 4,
     ratio: 'fiftyFifty',
     ratioLabel: '50% sound / 50% air',
     tissue: 'required',
     stepIds: ALL_STEP_IDS,
     guidance: [],
     stepsNotPrinted: false,
+  },
+  {
+    id: 'phase4',
+    label: 'Phase 4',
+    phaseNumber: 4,
+    // [not printed] as a ratio - Phase 4 is progression guidance, not a step list.
+    ratio: null,
+    ratioLabel: null,
+    tissue: 'optional',
+    stepIds: [],
+    guidance: STRETCH_AND_FLOW_PHASE4_GUIDANCE,
+    stepsNotPrinted: true,
   },
 ]
 
@@ -505,7 +499,7 @@ export const STRETCH_AND_FLOW_CARRYOVER: readonly StretchAndFlowCarryoverItem[] 
  * these are declared explicitly; a protocol-integrity test asserts they stay in
  * sync with the object arrays above.
  */
-export const STRETCH_AND_FLOW_STAGE_IDS = ['airOnly', 'phase1', 'phase2', 'phase3', 'phase4'] as const
+export const STRETCH_AND_FLOW_STAGE_IDS = ['phase1', 'phase2', 'phase3', 'phase4'] as const
 export const STRETCH_AND_FLOW_STEP_IDS = ['openThroat', 'oneNumber', 'twoNumbers', 'threeNumbers', 'fiveNumbers'] as const
 export const STRETCH_AND_FLOW_CUE_IDS = ['avoidPressedWhisper', 'elongateVowels', 'roundLips'] as const
 export const STRETCH_AND_FLOW_CARRYOVER_IDS = [
@@ -547,7 +541,7 @@ export const STRETCH_AND_FLOW_CARRYOVER_IDS = [
 ] as const
 
 /**
- * Display labels for the voicing ratios. Air Only's percentage is derived (the
+ * Display labels for the voicing ratios. Phase 1's percentage is derived (the
  * handout does not print one), so it is labelled "Air only" rather than a
  * fabricated ratio.
  */
@@ -558,24 +552,26 @@ export const STRETCH_AND_FLOW_RATIO_LABELS: Record<StretchAndFlowRatio, string> 
 }
 
 /**
- * The first step's tissue instruction depends on the stage (spec 2.3): Air Only
- * blows the tissue, Phase 1 and Phase 4 stay with it.
+ * The first step's tissue instruction depends on the stage (spec 2.3): Phase 1
+ * (Air Only) blows the tissue first; the voiced phases stay with it.
  */
 export function stretchAndFlowStepLabel(step: StretchAndFlowStep, stage: StretchAndFlowStage | undefined): string {
   if (step.id !== 'openThroat') return step.label
-  return stage?.id === 'airOnly'
+  return stage?.ratio === 'airOnly'
     ? 'Open throat on "oooo" vowel, then blow the tissue 5-7 times'
     : 'Open throat on "oooo" vowel (still with tissue)'
 }
 
 /**
- * Display label for a timeline span id. Legacy spans use `legacy-phase-N`; a
- * phase within the canonical set was recorded before stages existed, a higher
- * one is not in the current handout (ADR-0001).
+ * Display label for a timeline span id. `airOnly` was its own stage before the
+ * 2026-10-15 correction and is now Phase 1 (ADR-0002). Legacy spans use
+ * `legacy-phase-N`; a phase within the canonical set was recorded before stages
+ * existed, a higher one is not in the current handout (ADR-0001).
  */
 export function stretchAndFlowStageLabel(stageId: string): string {
   const stage = STRETCH_AND_FLOW_STAGE_BY_ID.get(stageId)
   if (stage) return stage.label
+  if (stageId === 'airOnly') return 'Phase 1 (recorded before the stage merge)'
   const legacyMatch = /^legacy-phase-(\d+)$/.exec(stageId)
   if (legacyMatch) {
     const phaseNumber = Number(legacyMatch[1])

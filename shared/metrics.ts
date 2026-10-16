@@ -376,7 +376,7 @@ export function protocolHighlights(sessions: readonly Session[]): ProtocolHighli
   }
 
   // Count changes between recorded stages, not just phase numbers, so moving
-  // from the Air Only foundation to Phase 1 counts as a change (N4). A legacy
+  // from Phase 1 (Air Only) to Phase 2 counts as a change (N4). A legacy
   // row contributes its `legacy-phase-N` key, so old data still counts.
   const stageKeysOldestFirst: string[] = []
   for (const session of [...completeSessions].reverse()) {

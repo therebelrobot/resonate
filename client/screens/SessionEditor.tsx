@@ -695,7 +695,7 @@ function StretchAndFlowFields({
     // usedTissue is left as recorded: choosing a stage is not an observation
     // that the tissue was used (spec 3.2 - null when not recorded).
     // Steps are preserved by id across stages that share the five-step shape.
-    // A stage whose steps are not printed (Phase 2/3) keeps whatever was already
+    // A stage whose steps are not printed (Phase 4) keeps whatever was already
     // entered rather than discarding it (N6).
     const steps =
       nextStage.stepIds.length === 0
@@ -704,14 +704,16 @@ function StretchAndFlowFields({
             const existing = detail.steps.find((step) => step.stepId === stepId)
             return existing ?? { stepId, completed: false, breathCount: null }
           })
+    // The "Toggle 1 & 2" note belongs to Phase 1 and Phase 2 (ADR-0002); clear
+    // the toggle on any other stage.
+    const togglesAirOnlyAndVoiced = nextStage.id === 'phase1' || nextStage.id === 'phase2'
     onChange({
       phaseNumber: nextStage.phaseNumber,
       stretchAndFlow: {
         ...detail,
         stageId: nextStage.id,
         ratio: nextStage.ratio,
-        // The Phase 4 toggle only applies to Phase 4; clear it otherwise.
-        toggledAirOnlyAndVoiced: nextStage.id === 'phase4' ? detail.toggledAirOnlyAndVoiced : null,
+        toggledAirOnlyAndVoiced: togglesAirOnlyAndVoiced ? detail.toggledAirOnlyAndVoiced : null,
         steps,
       },
     })
@@ -755,7 +757,7 @@ function StretchAndFlowFields({
         </div>
         {stage ? (
           <p className="field-hint" id="sf-stage-summary">
-            {stage.ratioLabel ?? 'Voicing ratio not printed in the handout'}
+            {stage.ratioLabel ?? 'Progression guidance (no voicing ratio)'}
             {stage.tissue === 'required'
               ? ' - tissue: still with tissue'
               : stage.tissue === 'optional'
@@ -897,16 +899,17 @@ function StretchAndFlowFields({
         <h4 id="sf-pacing-heading">Pacing and safety</h4>
         <ul>
           {STRETCH_AND_FLOW_PACING.filter(
-            // "Toggle 1 & 2" is the Phase 4 air-only/voiced toggle; it does not
-            // apply to the other stages.
-            (item) => item.id !== 'toggleInstruction' || stage?.id === 'phase4',
+            // "Toggle 1 & 2" is the Phase 1/Phase 2 air-only/voiced toggle; it
+            // does not apply to the other stages.
+            (item) =>
+              item.id !== 'toggleInstruction' || stage?.id === 'phase1' || stage?.id === 'phase2',
           ).map((item) => (
             <li key={item.id}>{item.text}</li>
           ))}
         </ul>
       </aside>
 
-      {stage?.id === 'phase4' && (
+      {(stage?.id === 'phase1' || stage?.id === 'phase2') && (
         <label className="checkbox-field">
           <input
             type="checkbox"
