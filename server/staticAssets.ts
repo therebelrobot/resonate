@@ -24,6 +24,8 @@ const CONTENT_TYPES_BY_EXTENSION: Record<string, string> = {
   '.json': 'application/json',
   '.txt': 'text/plain; charset=utf-8',
   '.woff2': 'font/woff2',
+  // The Sonorant analysis core, emitted by the client build.
+  '.wasm': 'application/wasm',
 }
 
 export function loadStaticAssets(publicAssetsDirectory: string): Map<string, StaticAsset> {

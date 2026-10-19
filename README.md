@@ -101,6 +101,34 @@ only after the server process restarts (in Docker: `docker compose up -d --force
 | `RESONATE_SCRYPT_N` | `131072` | scrypt cost for a new log (fixed for the life of that log) |
 | `RESONATE_TIMEZONE` | server zone | IANA zone for the Date and Time columns of the server-side CSV export |
 
+## Recordings, and the live vocal monitor
+
+**Record a step inline.** Every step in the editor has a **Record** button. Stop it
+and the clip is uploaded right away and stored encrypted with the session, not held
+only in the tab - a recording on a brand-new session creates the draft first, so a
+lock or a backgrounded phone cannot lose it. Recordings play back on the session
+screen and in the report, and they leave with the session in **Settings -> Export**
+(each carries its audio as base64). Deleting a session deletes its recordings.
+
+The microphone is requested only when you tap **Record** or **Start**, and locking
+releases it. The audio constraints are fixed rather than offered as options:
+AGC, echo cancellation and noise suppression all rewrite the signal, and this app is
+for measuring voice, not for calls.
+
+**Watch your pitch and resonance anywhere.** The sticky **vocal monitor** sits on
+every screen. Tap **Start** and the microphone feeds [Sonorant](https://github.com/therebelrobot/sonorant)'s
+analysis core (compiled to WebAssembly) through an AudioWorklet and a Worker. The
+strip shows the current pitch in Hz with its note name and your resonance in
+semitones relative to the session's own baseline; expand it for the pitch-by-resonance
+pad and the written, confidence-bearing summary. Pitch and resonance are always shown
+separately, and nothing is shown as a value without a confidence - the Sonorant
+principles, and the reason it measures resonance rather than pitch alone.
+
+The analysis runs entirely on your device: no audio is analysed or stored anywhere
+except the encrypted log you also record into. (A recorded clip *is* stored, because
+you asked for it; the live monitor is never recorded.) See
+[`docs/specs/adr-0004-recordings-and-vocal-monitor.md`](docs/specs/adr-0004-recordings-and-vocal-monitor.md).
+
 ## Reports, and the CSV for your SLP
 
 **Insights -> Make a report for your SLP** (also under Settings) builds a report from a date
@@ -157,8 +185,11 @@ token is random and only its SHA-256 is held server-side. Every state-changing r
 carry a custom header (forcing a CORS preflight that is never granted) and a same-origin
 `Origin`. Strict CSP with no inline scripts or styles and no third-party origins,
 `frame-ancestors 'none'`, `no-referrer`, HSTS, `Cache-Control: no-store` on every API response,
-`noindex`. Static files are served from an allow-list built at startup, so there is no path
-traversal surface. Errors never echo request content into logs.
+`noindex`. The only widening is for the live monitor: `microphone=(self)` and
+`script-src 'self' 'wasm-unsafe-eval'` (WebAssembly instantiation; not JavaScript `eval`),
+plus `media-src`/`worker-src` for the on-device capture pipeline. Static files are served from
+an allow-list built at startup, so there is no path traversal surface. Errors never echo
+request content into logs.
 
 **In the browser.** Decrypted sessions live only in React state. Nothing is written to
 localStorage, IndexedDB, or a service worker cache. An unfinished session, though, is not held
@@ -197,7 +228,9 @@ npm run build        # dist/public + dist/server.mjs
 ```
 
 Stack: Hono on Node (24 in the image, 22.13+ works), `node:sqlite`, React 19 + Vite, zod for
-request validation. Five runtime dependencies; the server builds to a single esbuild bundle.
+request validation. Seven runtime dependencies - the two additions (`sonorant`,
+`sonorant-react`) are client-only, for the live monitor - and the server builds to a single
+esbuild bundle.
 
 There is no ORM on purpose: every row is a ciphertext blob keyed by a random id, so there are no
 columns to model, query, or migrate; the handful of SQL statements per table sit in
@@ -266,8 +299,15 @@ device:
       screen offers to resume, and choosing it restores the fields and the step you were on.
 - [ ] The authenticator link opens your authenticator app on iOS.
 - [ ] Password manager offers to fill the passphrase on the unlock screen.
-- [ ] The report prints with the navigation hidden and the session list intact.
+- [ ] The report prints with the navigation hidden and the session list intact, and a step note
+      typed in the editor appears in the printed report.
 - [ ] CSV export opens correctly in your spreadsheet app.
+- [ ] Recording a step on a brand-new session creates the draft, and the clip is still there
+      after a lock and unlock.
+- [ ] The vocal monitor starts on a tap, shows pitch and resonance, and the browser's mic
+      indicator goes away when you tap **Stop** or lock the app.
+- [ ] A saved recording plays back on the session screen over HTTPS.
+- [ ] The floating monitor does not cover the last row of content on a narrow phone.
 
 ## License
 

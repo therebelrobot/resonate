@@ -10,6 +10,7 @@ import {
   type EditorDraftSnapshot,
 } from '../editorDraftStore'
 import { IntensitySlider } from '../components/IntensitySlider'
+import { StepRecorder } from '../components/StepRecorder'
 import { TagPicker } from '../components/TagPicker'
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '../format'
 import {
@@ -28,6 +29,7 @@ import {
   sortSegmentsByProtocolOrder,
   type CarryoverDetail,
   type PitchWorkInput,
+  type Recording,
   type ResonanceDetail,
   type Session,
   type SessionInput,
@@ -180,7 +182,7 @@ export function SessionEditor({
   existingSession?: Session
   initialDraftId?: string
 }) {
-  const { refresh, sessions, isLoading } = useSessionData()
+  const { refresh, sessions, isLoading, recordingsBySessionId } = useSessionData()
 
   // The editor's identity in the in-memory draft store: a new session is 'new',
   // an edit is keyed by the session id. It stays stable across a lock/unlock.
@@ -311,6 +313,32 @@ export function SessionEditor({
   }
   const runAutosaveRef = useRef(runAutosave)
   runAutosaveRef.current = runAutosave
+
+  // A recording needs a saved session to attach to. Autosave deliberately skips a
+  // session with nothing written yet, so a recording on a fresh session creates the
+  // draft directly rather than finding no home for the audio.
+  const ensureSessionId = async (): Promise<string | null> => {
+    if (savedSessionIdRef.current) return savedSessionIdRef.current
+    const inFlight = autosavePromiseRef.current
+    if (inFlight) await inFlight.catch(() => undefined)
+    if (savedSessionIdRef.current) return savedSessionIdRef.current
+    try {
+      const saved = await api.createSession({ ...latestRef.current.draft, status: 'draft' })
+      savedSessionIdRef.current = saved.id
+      setSavedSessionId(saved.id)
+      await refresh()
+      if (!existingSession) replaceHashQuietly(`/log/${saved.id}`)
+      return saved.id
+    } catch {
+      return null
+    }
+  }
+  const recorderConfig = {
+    sessionId: savedSessionId,
+    ensureSessionId,
+    recordings: savedSessionId ? recordingsBySessionId.get(savedSessionId) ?? [] : [],
+    onChanged: () => void refresh(),
+  } satisfies { sessionId: string | null; ensureSessionId: () => Promise<string | null>; recordings: Recording[]; onChanged: () => void }
 
   // Resolve a draft named in the URL hash once the session list is available.
   useEffect(() => {
@@ -553,6 +581,7 @@ export function SessionEditor({
             minutesText={minutesText}
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
+            recorder={recorderConfig}
           >
             {segmentOf('warmupNote') && (
               <div className="editor-fields">
@@ -590,6 +619,7 @@ export function SessionEditor({
             minutesText={minutesText}
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
+            recorder={recorderConfig}
           >
             {segmentOf('glides') && (
               <div className="editor-fields">
@@ -658,6 +688,7 @@ export function SessionEditor({
                 minutesText={minutesText}
                 onToggle={toggleSegment}
                 onMinutesChange={setMinutes}
+                recorder={recorderConfig}
               >
                 {segmentOf(kind) && (
                   <div className="editor-fields">
@@ -726,6 +757,7 @@ export function SessionEditor({
             minutesText={minutesText}
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
+            recorder={recorderConfig}
           >
             {segmentOf('stretchAndFlow') && (
               <div className="editor-fields">
@@ -758,6 +790,7 @@ export function SessionEditor({
             minutesText={minutesText}
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
+            recorder={recorderConfig}
           >
             {segmentOf('resonance') && (
               <div className="editor-fields">
@@ -789,6 +822,7 @@ export function SessionEditor({
             minutesText={minutesText}
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
+            recorder={recorderConfig}
           >
             {segmentOf('carryover') && (
               <div className="editor-fields">
@@ -815,6 +849,7 @@ export function SessionEditor({
             minutesText={minutesText}
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
+            recorder={recorderConfig}
           >
             {segmentOf('endurance') && (
               <div className="editor-fields">
@@ -912,17 +947,25 @@ export function SessionEditor({
   )
 }
 
+interface PartRecorderConfig {
+  sessionId: string | null
+  ensureSessionId: () => Promise<string | null>
+  recordings: Recording[]
+  onChanged: () => void
+}
+
 interface PartStepProps {
   kind: SegmentKind
   included: boolean
   minutesText: Record<string, string>
   onToggle: (kind: SegmentKind, included: boolean) => void
   onMinutesChange: (kind: SegmentKind, text: string) => void
+  recorder?: PartRecorderConfig
   children?: ReactNode
 }
 
 /** Wrapper every protocol part shares: skip toggle, the plan's own wording, minutes. */
-function PartStep({ kind, included, minutesText, onToggle, onMinutesChange, children }: PartStepProps) {
+function PartStep({ kind, included, minutesText, onToggle, onMinutesChange, recorder, children }: PartStepProps) {
   const definition = SEGMENT_DEFINITIONS[kind]
   return (
     <section className="part-step">
@@ -963,6 +1006,7 @@ function PartStep({ kind, included, minutesText, onToggle, onMinutesChange, chil
             />
           </div>
           {children}
+          {recorder && <StepRecorder kind={kind} {...recorder} />}
         </>
       ) : (
         <p className="empty-hint">Skipped today.</p>

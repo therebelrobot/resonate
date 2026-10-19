@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, LOCKED_EVENT_NAME } from './api'
 import { SessionDataProvider, useSessionData } from './sessionData'
+import { AudioCaptureProvider } from './audio/AudioCaptureProvider'
+import { VocalMonitor } from './components/VocalMonitor'
 import { navigateTo, useRoute } from './router'
 import { SetupScreen, UnlockScreen } from './screens/AccessScreens'
 import { TodayScreen } from './screens/TodayScreen'
@@ -53,7 +55,10 @@ export function App() {
   return (
     // Unmounting this provider on lock drops every decrypted session from memory.
     <SessionDataProvider>
-      <UnlockedShell status={status} onStatusChange={() => void loadStatus()} onLock={() => void lockNow()} />
+      {/* Also unmounts on lock, which releases the microphone and stops the monitor. */}
+      <AudioCaptureProvider>
+        <UnlockedShell status={status} onStatusChange={() => void loadStatus()} onLock={() => void lockNow()} />
+      </AudioCaptureProvider>
     </SessionDataProvider>
   )
 }
@@ -170,6 +175,7 @@ function UnlockedShell({
         </nav>
       )}
       <main className="app-main">{screenContent}</main>
+      <VocalMonitor />
     </div>
   )
 }

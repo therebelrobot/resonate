@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { api } from '../api'
 import { useSessionData } from '../sessionData'
-import { formatMinutes, formatPercent, formatRating, formatSigned } from '../format'
+import { formatClockDuration, formatMinutes, formatPercent, formatRating, formatSigned } from '../format'
 import {
   carryoverSummary,
   currentStretchAndFlowStage,
@@ -33,7 +33,16 @@ import {
   TRACK_DEFINITIONS,
   SEGMENT_TRACK,
 } from '../../shared/protocol'
-import { SESSION_ROLE_LABELS, TAG_KIND_LABELS, noteNameForHz, type Session, type Tag, type TagKind } from '../../shared/model'
+import {
+  SESSION_ROLE_LABELS,
+  TAG_KIND_LABELS,
+  noteNameForHz,
+  recordingDisplayLabel,
+  type Recording,
+  type Session,
+  type Tag,
+  type TagKind,
+} from '../../shared/model'
 
 const RANGE_OPTIONS = [
   { days: 7, label: 'Last 7 days' },
@@ -45,7 +54,7 @@ const RANGE_OPTIONS = [
 const CSV_COLUMNS = ['Date', 'Time', 'Timestamp', 'Measure', 'Value', 'Unit', 'Notes']
 
 export function ReportScreen() {
-  const { sessions, tags, tagById, isLoading, loadError } = useSessionData()
+  const { sessions, tags, tagById, isLoading, loadError, recordingsBySessionId } = useSessionData()
   const [rangeDays, setRangeDays] = useState<number | null>(30)
   const [includeWrittenText, setIncludeWrittenText] = useState(true)
   const [includeDrafts, setIncludeDrafts] = useState(false)
@@ -96,7 +105,10 @@ export function ReportScreen() {
   }
 
   const downloadCsv = () => {
-    const csvText = buildCsvText(CSV_COLUMNS, buildSlpCsvRows(reportSessions, tagByIdEntity, includeWrittenText))
+    const csvText = buildCsvText(
+      CSV_COLUMNS,
+      buildSlpCsvRows(reportSessions, tagByIdEntity, includeWrittenText, recordingsBySessionId),
+    )
     const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -344,7 +356,8 @@ export function ReportScreen() {
           {tagNamesOfKind(session, 'watch', tagByIdEntity).length > 0 && (
             <p className="detail-text">Watch items: {tagNamesOfKind(session, 'watch', tagByIdEntity).join(', ')}.</p>
           )}
-          {includeWrittenText && session.slpNote.trim() && <p className="detail-text">{session.slpNote}</p>}
+          {includeWrittenText && <SessionWrittenNotes session={session} />}
+          <SessionRecordings recordings={recordingsBySessionId.get(session.id) ?? []} />
         </section>
       ))}
 
@@ -367,6 +380,77 @@ export function ReportScreen() {
   )
 }
 
+/**
+ * Everything you wrote, per step, plus the SLP note. The report used to print only
+ * the session-level note, so a note typed on a step was silently dropped from the
+ * PDF and the SLP CSV (bug: "I can't see my notes in the SLP pdf export").
+ */
+function SessionWrittenNotes({ session }: { session: Session }) {
+  const stepNotes = session.segments
+    .map((segment) => ({ segment, text: segment.notes.trim() }))
+    .filter((entry) => entry.text !== '')
+  const freeText = [
+    ...session.segments.flatMap((segment) =>
+      segment.stretchAndFlow?.carryover?.customText.trim()
+        ? [
+            {
+              label: `Carryover notes (${SEGMENT_DEFINITIONS[segment.kind].label})`,
+              text: segment.stretchAndFlow.carryover.customText.trim(),
+            },
+          ]
+        : [],
+    ),
+    ...session.segments.flatMap((segment) =>
+      segment.carryover?.customContext.trim()
+        ? [
+            {
+              label: `Carry-over context (${SEGMENT_DEFINITIONS[segment.kind].label})`,
+              text: segment.carryover.customContext.trim(),
+            },
+          ]
+        : [],
+    ),
+  ]
+  if (stepNotes.length === 0 && freeText.length === 0 && !session.slpNote.trim()) return null
+  return (
+    <div className="report-notes">
+      {stepNotes.length > 0 && (
+        <ul className="measure-list">
+          {stepNotes.map(({ segment, text }) => (
+            <li key={segment.kind}>
+              <strong>{SEGMENT_DEFINITIONS[segment.kind].label}:</strong> {text}
+            </li>
+          ))}
+        </ul>
+      )}
+      {freeText.map((entry) => (
+        <p className="detail-text" key={`${entry.label}:${entry.text}`}>
+          <strong>{entry.label}:</strong> {entry.text}
+        </p>
+      ))}
+      {session.slpNote.trim() && <p className="detail-text">{session.slpNote}</p>}
+    </div>
+  )
+}
+
+/** Recordings attached to a session, listed by step; playable on screen, text-only in print. */
+function SessionRecordings({ recordings }: { recordings: Recording[] }) {
+  if (recordings.length === 0) return null
+  return (
+    <div className="report-recordings">
+      <p className="field-label">Recordings</p>
+      <ul className="measure-list">
+        {recordings.map((recording) => (
+          <li key={recording.id}>
+            {recording.segmentKind ? SEGMENT_DEFINITIONS[recording.segmentKind].label : 'Session'}:{' '}
+            {formatClockDuration(recording.durationSeconds)} ({recordingDisplayLabel(recording)})
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function tagNamesOfKind(session: Session, tagKind: TagKind, tagById: Map<string, Tag>): string[] {
   const tagIds =
     tagKind === 'focus'
@@ -383,7 +467,12 @@ function tagNamesOfKind(session: Session, tagKind: TagKind, tagById: Map<string,
 }
 
 /** Long format: one row per measurement, the shape clinical tools tend to expect. */
-function buildSlpCsvRows(sessions: readonly Session[], tagById: Map<string, Tag>, includeWrittenText: boolean): string[][] {
+function buildSlpCsvRows(
+  sessions: readonly Session[],
+  tagById: Map<string, Tag>,
+  includeWrittenText: boolean,
+  recordingsBySessionId: Map<string, Recording[]>,
+): string[][] {
   const rows: string[][] = []
   for (const session of sessions) {
     const occurredAt = new Date(session.occurredAt)
@@ -496,11 +585,28 @@ function buildSlpCsvRows(sessions: readonly Session[], tagById: Map<string, Tag>
       }
       if (segment.paceRating !== null) addRow('Endurance pace', String(segment.paceRating), '0-100', '')
       if (segment.fatigueRating !== null) addRow('Endurance fatigue', String(segment.fatigueRating), '0-100', '')
+      // Step notes travel with the measurement rows (previously dropped entirely).
+      if (includeWrittenText && segment.notes.trim()) {
+        addRow(`${SEGMENT_DEFINITIONS[segment.kind].label} notes`, segment.notes.replace(/\s+/g, ' '), 'text', '')
+      }
+      if (includeWrittenText && segment.stretchAndFlow?.carryover?.customText.trim()) {
+        addRow('Carryover notes', segment.stretchAndFlow.carryover.customText.replace(/\s+/g, ' '), 'text', '')
+      }
+      if (includeWrittenText && segment.carryover?.customContext.trim()) {
+        addRow('Carry-over context', segment.carryover.customContext.replace(/\s+/g, ' '), 'text', '')
+      }
     }
 
     for (const tagKind of ['focus', 'win', 'watch'] as TagKind[]) {
       const names = tagNamesOfKind(session, tagKind, tagById)
       if (names.length > 0) addRow(TAG_KIND_LABELS[tagKind].plural, names.join('; '), 'tag', '')
+    }
+
+    // Recordings are listed as measurements too; the audio itself is in the
+    // server-side export, not the CSV.
+    for (const recording of recordingsBySessionId.get(session.id) ?? []) {
+      const stepLabel = recording.segmentKind ? SEGMENT_DEFINITIONS[recording.segmentKind].label : 'Session'
+      addRow(`${stepLabel} recording`, formatClockDuration(recording.durationSeconds), 'duration', recordingDisplayLabel(recording))
     }
 
     // One row per session so the session-level totals survive the long format.

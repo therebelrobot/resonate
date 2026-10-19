@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { api } from '../api'
 import { useSessionData } from '../sessionData'
 import { navigateTo } from '../router'
-import { formatFullTimestamp, formatMinutes, formatRating, formatSeconds } from '../format'
+import { formatClockDuration, formatFullTimestamp, formatMinutes, formatRating, formatSeconds } from '../format'
 import { minutesByTrack, sessionTotalMinutes } from '../../shared/metrics'
 import {
   GLIDE_PACE_LABELS,
@@ -10,8 +10,10 @@ import {
   TAG_KINDS,
   TAG_KIND_LABELS,
   noteNameForHz,
+  recordingDisplayLabel,
   type CarryoverDetail,
   type PitchWorkInput,
+  type Recording,
   type ResonanceDetail,
   type Session,
   type StretchAndFlowDetail,
@@ -33,7 +35,8 @@ import {
 } from '../../shared/protocol'
 
 export function SessionDetailScreen({ session }: { session: Session }) {
-  const { tagById, refresh } = useSessionData()
+  const { tagById, refresh, recordingsBySessionId } = useSessionData()
+  const sessionRecordings = recordingsBySessionId.get(session.id) ?? []
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const trackMinutes = minutesByTrack(session)
@@ -137,6 +140,7 @@ export function SessionDetailScreen({ session }: { session: Session }) {
             </ul>
           )}
           {segment.notes.trim() && <p className="detail-text">{segment.notes}</p>}
+          <SegmentRecordings recordings={sessionRecordings.filter((recording) => recording.segmentKind === segment.kind)} />
         </section>
       ))}
 
@@ -174,6 +178,24 @@ export function SessionDetailScreen({ session }: { session: Session }) {
           {isDeleting ? 'Deleting...' : 'Delete this session'}
         </button>
       </footer>
+    </div>
+  )
+}
+
+/** Inline recordings attached to a step, playable from the encrypted store. */
+function SegmentRecordings({ recordings }: { recordings: Recording[] }) {
+  if (recordings.length === 0) return null
+  return (
+    <div className="recording-list">
+      {recordings.map((recording) => (
+        <div key={recording.id} className="recording-item">
+          <div className="recording-item-head">
+            <span className="recording-item-label">{recordingDisplayLabel(recording)}</span>
+            <span className="recording-item-meta">{formatClockDuration(recording.durationSeconds)}</span>
+          </div>
+          <audio controls preload="none" src={api.recordingAudioUrl(recording.id)} />
+        </div>
+      ))}
     </div>
   )
 }

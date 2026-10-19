@@ -1,8 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import type { Database } from './database'
-import type { AuditEvent, ProtocolDocument, ProtocolDocumentId, Session, SessionInput, Tag, TagInput } from '../shared/model'
+import type {
+  AuditEvent,
+  ProtocolDocument,
+  ProtocolDocumentId,
+  Recording,
+  SegmentKind,
+  Session,
+  SessionInput,
+  Tag,
+  TagInput,
+} from '../shared/model'
 import { PROTOCOL_DOCUMENT_IDS, isProtocolDocumentId, normalizeSegmentInput, sortSegmentsByProtocolOrder } from '../shared/model'
-import { decryptJson, encryptJson, recordAdditionalAuthenticatedData } from './crypto/envelope'
+import { decryptBytes, decryptJson, encryptBytes, encryptJson, recordAdditionalAuthenticatedData } from './crypto/envelope'
 import { DEFAULT_TAGS } from './seedTags'
 
 export class RecordNotFoundError extends Error {
@@ -129,6 +139,110 @@ export class SessionRepository {
 
   delete(sessionId: string): void {
     this.database.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
+  }
+}
+
+/** Server-side input for a recording: metadata plus the raw audio bytes. */
+export interface RecordingInput {
+  segmentKind: SegmentKind | null
+  label: string
+  mimeType: string
+  durationSeconds: number | null
+  audio: Buffer
+}
+
+interface EncryptedRecordingRow {
+  id: string
+  session_id: string
+  payload: Uint8Array
+  audio: Uint8Array
+}
+
+/** AAD for a recording's audio; distinct from its metadata so the two cannot be swapped. */
+function recordingAudioAad(recordingId: string): string {
+  return `resonate:record:recording_audio:${recordingId}`
+}
+
+export class RecordingRepository {
+  constructor(private readonly database: Database) { }
+
+  listAll(dataEncryptionKey: Buffer): Recording[] {
+    const rows = this.database
+      .prepare('SELECT id, session_id, payload FROM recordings')
+      .all() as unknown as Omit<EncryptedRecordingRow, 'audio'>[]
+    return rows
+      .map((row) => this.decodeMetadata(dataEncryptionKey, row))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  }
+
+  listForSession(dataEncryptionKey: Buffer, sessionId: string): Recording[] {
+    const rows = this.database
+      .prepare('SELECT id, session_id, payload FROM recordings WHERE session_id = ?')
+      .all(sessionId) as unknown as Omit<EncryptedRecordingRow, 'audio'>[]
+    return rows
+      .map((row) => this.decodeMetadata(dataEncryptionKey, row))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+  }
+
+  get(dataEncryptionKey: Buffer, recordingId: string): Recording {
+    const row = this.database
+      .prepare('SELECT id, session_id, payload FROM recordings WHERE id = ?')
+      .get(recordingId) as unknown as Omit<EncryptedRecordingRow, 'audio'> | undefined
+    if (!row) throw new RecordNotFoundError('That recording no longer exists.')
+    return this.decodeMetadata(dataEncryptionKey, row)
+  }
+
+  /** The audio bytes for one recording, decrypted on demand. */
+  getAudio(dataEncryptionKey: Buffer, recordingId: string): { recording: Recording; audio: Buffer } {
+    const row = this.database
+      .prepare('SELECT id, session_id, payload, audio FROM recordings WHERE id = ?')
+      .get(recordingId) as unknown as EncryptedRecordingRow | undefined
+    if (!row) throw new RecordNotFoundError('That recording no longer exists.')
+    const recording = this.decodeMetadata(dataEncryptionKey, row)
+    const audio = decryptBytes(dataEncryptionKey, row.audio, recordingAudioAad(row.id))
+    return { recording, audio }
+  }
+
+  create(dataEncryptionKey: Buffer, sessionId: string, input: RecordingInput, createdAtIso: string): Recording {
+    const recording: Recording = {
+      id: randomUUID(),
+      sessionId,
+      segmentKind: input.segmentKind,
+      label: input.label,
+      mimeType: input.mimeType,
+      durationSeconds: input.durationSeconds,
+      byteLength: input.audio.byteLength,
+      createdAt: createdAtIso,
+    }
+    this.database
+      .prepare('INSERT INTO recordings (id, session_id, payload, audio) VALUES (?, ?, ?, ?)')
+      .run(
+        recording.id,
+        sessionId,
+        encryptJson(dataEncryptionKey, recording, recordAdditionalAuthenticatedData('recordings', recording.id)),
+        encryptBytes(dataEncryptionKey, input.audio, recordingAudioAad(recording.id)),
+      )
+    return recording
+  }
+
+  delete(recordingId: string): void {
+    this.database.prepare('DELETE FROM recordings WHERE id = ?').run(recordingId)
+  }
+
+  deleteForSession(sessionId: string): void {
+    this.database.prepare('DELETE FROM recordings WHERE session_id = ?').run(sessionId)
+  }
+
+  private decodeMetadata(
+    dataEncryptionKey: Buffer,
+    row: Omit<EncryptedRecordingRow, 'audio'>,
+  ): Recording {
+    const stored = decryptJson<Omit<Recording, 'sessionId'>>(
+      dataEncryptionKey,
+      row.payload,
+      recordAdditionalAuthenticatedData('recordings', row.id),
+    )
+    return { ...stored, id: row.id, sessionId: row.session_id }
   }
 }
 

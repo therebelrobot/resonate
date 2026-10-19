@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import {
   GLIDE_PACES,
+  MAX_RECORDING_BYTES,
+  MAX_RECORDING_SECONDS,
   STRETCH_AND_FLOW_BREATH_COUNT_MAX,
   STRETCH_AND_FLOW_CARRYOVER_KINDS,
   STRETCH_AND_FLOW_RATIOS,
@@ -151,6 +153,23 @@ export const sessionInputSchema = z.object({
   watchTagIds: tagIdListSchema,
   slpNote: longTextSchema,
   segments: z.array(sessionSegmentInputSchema).max(8),
+})
+
+/** base64 inflates by 4/3; leave a little headroom for padding and whitespace. */
+const MAX_RECORDING_BASE64_LENGTH = Math.ceil(MAX_RECORDING_BYTES / 3) * 4 + 16
+
+export const recordingInputSchema = z.object({
+  segmentKind: z.enum(SEGMENT_KINDS).nullable(),
+  label: z.string().trim().max(120),
+  // Echoed back as the response Content-Type, so it must never be markup. The
+  // audio type plus optional parameters, e.g. "audio/webm;codecs=opus".
+  mimeType: z
+    .string()
+    .trim()
+    .max(120)
+    .regex(/^audio\/[a-z0-9.+-]+(?:\s*;\s*[a-z0-9=.+-]+)*$/i),
+  durationSeconds: z.number().min(0).max(MAX_RECORDING_SECONDS).nullable(),
+  audioBase64: z.string().min(1).max(MAX_RECORDING_BASE64_LENGTH),
 })
 
 export const tagInputSchema = z.object({
