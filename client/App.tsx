@@ -106,7 +106,7 @@ function UnlockedShell({
       : undefined
 
   let screenContent
-  if (route.screen === 'new-session') screenContent = <SessionEditor key="new" />
+  if (route.screen === 'new-session') screenContent = <SessionEditor key="new" initialDraftId={route.draftId} />
   else if ((route.screen === 'session' || route.screen === 'edit-session') && !routedSession) {
     screenContent = isLoading ? (
       <p className="screen-message">Opening your practice log...</p>

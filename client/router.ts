@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 export type Route =
   | { screen: 'today' }
   | { screen: 'sessions' }
-  | { screen: 'new-session' }
+  | { screen: 'new-session'; draftId?: string }
   | { screen: 'session'; sessionId: string }
   | { screen: 'edit-session'; sessionId: string }
   | { screen: 'insights' }
@@ -16,7 +16,7 @@ export type Route =
 export function parseRoute(hash: string): Route {
   const segments = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
   const [first, second, third] = segments
-  if (first === 'log') return { screen: 'new-session' }
+  if (first === 'log') return second ? { screen: 'new-session', draftId: second } : { screen: 'new-session' }
   if (first === 'sessions' && second && third === 'edit') return { screen: 'edit-session', sessionId: second }
   if (first === 'sessions' && second) return { screen: 'session', sessionId: second }
   if (first === 'sessions') return { screen: 'sessions' }
@@ -36,6 +36,17 @@ export function navigateTo(hashPath: string, options: { replace?: boolean } = {}
   } else {
     window.location.hash = targetHash
   }
+}
+
+/**
+ * Updates the hash without firing a hashchange or scrolling. The editor uses it
+ * to record the id of the draft it autosaved mid-edit: the id is opaque and not
+ * secret, and keeping it in the URL lets a reload (or a killed tab) find the
+ * encrypted draft again. Updating it must not tear the editor down, which is why
+ * this does not dispatch an event the router would react to.
+ */
+export function replaceHashQuietly(hashPath: string): void {
+  history.replaceState(null, '', `#${hashPath}`)
 }
 
 export function useRoute(): Route {

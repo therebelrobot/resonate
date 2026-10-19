@@ -1,7 +1,14 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from '../api'
-import { navigateTo } from '../router'
+import { navigateTo, replaceHashQuietly } from '../router'
 import { useSessionData } from '../sessionData'
+import {
+  clearEditorDraft,
+  isEditorDraftFresh,
+  readEditorDraft,
+  writeEditorDraft,
+  type EditorDraftSnapshot,
+} from '../editorDraftStore'
 import { IntensitySlider } from '../components/IntensitySlider'
 import { TagPicker } from '../components/TagPicker'
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '../format'
@@ -108,8 +115,80 @@ function parseMinutesToSeconds(text: string): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 60) : 0
 }
 
-export function SessionEditor({ existingSession }: { existingSession?: Session }) {
-  const { refresh } = useSessionData()
+/** How long after the last keystroke the draft is written to the server. */
+const AUTOSAVE_DEBOUNCE_MILLISECONDS = 1_200
+
+/**
+ * Whether a draft holds anything worth protecting. An editor the user opened and
+ * left untouched is neither autosaved nor offered for resume, so the banner only
+ * appears when there is real work to get back.
+ */
+function hasMeaningfulContent(draft: SessionInput, minutesText: Record<string, string>, stepIndex: number): boolean {
+  if (stepIndex > 0) return true
+  if (draft.role !== 'warmup' || draft.effortBefore !== 50 || draft.effortAfter !== null) return true
+  if (draft.slpNote.trim() !== '') return true
+  if (draft.focusTagIds.length > 0 || draft.winTagIds.length > 0 || draft.watchTagIds.length > 0) return true
+  if (Object.values(minutesText).some((text) => text.trim() !== '')) return true
+  return draft.segments.some(
+    (segment) =>
+      segment.seconds > 0 ||
+      segment.notes.trim() !== '' ||
+      segment.tagIds.length > 0 ||
+      segment.repetitions !== null ||
+      segment.clarityRating !== null ||
+      segment.voiceBreaks !== null ||
+      segment.glidePace !== null ||
+      segment.registerShifts !== null ||
+      segment.startNote.trim() !== '' ||
+      segment.topNote.trim() !== '' ||
+      segment.bottomNote.trim() !== '' ||
+      segment.notesClimbed !== null ||
+      segment.longestSustainSeconds !== null ||
+      segment.identifiedComfortableRange ||
+      segment.phaseNumber !== null ||
+      segment.coordinationRating !== null ||
+      segment.stretchAndFlow !== null ||
+      segment.pitch !== null ||
+      segment.resonance !== null ||
+      segment.carryover !== null ||
+      segment.paceRating !== null ||
+      segment.fatigueRating !== null,
+  )
+}
+
+/** Turns a stored session row into the snapshot the editor resumes from. */
+function snapshotFromSession(session: Session): EditorDraftSnapshot {
+  return {
+    editorKey: 'new',
+    draft: toSessionInput(session),
+    minutesText: toMinutesText(session.segments),
+    stepIndex: 0,
+    savedSessionId: session.id,
+    updatedAtMilliseconds: Date.now(),
+  }
+}
+
+/** A snapshot worth offering: it holds real work, or an autosaved server draft. */
+function isResumableDraft(snapshot: EditorDraftSnapshot): boolean {
+  return hasMeaningfulContent(snapshot.draft, snapshot.minutesText, snapshot.stepIndex) || snapshot.savedSessionId !== null
+}
+
+export function SessionEditor({
+  existingSession,
+  initialDraftId,
+}: {
+  existingSession?: Session
+  initialDraftId?: string
+}) {
+  const { refresh, sessions, isLoading } = useSessionData()
+
+  // The editor's identity in the in-memory draft store: a new session is 'new',
+  // an edit is keyed by the session id. It stays stable across a lock/unlock.
+  const editorKey = existingSession ? existingSession.id : 'new'
+  // A new session can be found again after a reload through the id autosave put
+  // in the URL hash; an edit's own row is already its durable copy.
+  const draftIdFromHash = existingSession ? undefined : initialDraftId
+
   const [draft, setDraft] = useState<SessionInput>(() =>
     existingSession ? toSessionInput(existingSession) : createEmptySessionInput(),
   )
@@ -120,6 +199,19 @@ export function SessionEditor({ existingSession }: { existingSession?: Session }
   const [savedSessionId, setSavedSessionId] = useState<string | null>(existingSession?.id ?? null)
   const [error, setError] = useState<string | null>(null)
   const [isBusy, setIsBusy] = useState(false)
+
+  // A draft to offer, resolved on mount. The in-memory snapshot wins when the tab
+  // is still alive (a lock/unlock, and it remembers the wizard step); failing
+  // that, a new session can still be found from the server by the id in the hash
+  // (a reload). The form waits behind the choice so a pending snapshot is never
+  // written over.
+  const [initialResume] = useState(() => {
+    const snapshot = readEditorDraft(editorKey)
+    const memoryCandidate = snapshot && isEditorDraftFresh(snapshot) && isResumableDraft(snapshot) ? snapshot : null
+    return { candidate: memoryCandidate, resolved: memoryCandidate !== null || !draftIdFromHash }
+  })
+  const [resumeCandidate, setResumeCandidate] = useState<EditorDraftSnapshot | null>(initialResume.candidate)
+  const [hasResolvedResume, setHasResolvedResume] = useState(initialResume.resolved)
 
   const currentStep = EDITOR_STEPS[stepIndex]!
   const includedKinds = draft.segments.map((segment) => segment.kind)
@@ -163,18 +255,153 @@ export function SessionEditor({ existingSession }: { existingSession?: Session }
   const tagIdsFor = (tagKind: TagKind) =>
     tagKind === 'focus' ? draft.focusTagIds : tagKind === 'win' ? draft.winTagIds : draft.watchTagIds
 
+  // Latest values for the autosave timer and the flush listeners, so neither
+  // depends on a stale render closure.
+  const latestRef = useRef({ draft, minutesText, stepIndex })
+  latestRef.current = { draft, minutesText, stepIndex }
+  // The draft row id is tracked in a ref as well as state: it has to be readable
+  // synchronously the moment an autosave resolves, before React re-renders.
+  const savedSessionIdRef = useRef<string | null>(existingSession?.id ?? null)
+  savedSessionIdRef.current = savedSessionId
+  const isBlockedRef = useRef(false)
+  isBlockedRef.current = !hasResolvedResume || resumeCandidate !== null
+  // Set while a final save runs, so no queued autosave can recreate or demote it.
+  const isFinalizingRef = useRef(false)
+  const autosavePromiseRef = useRef<Promise<void> | null>(null)
+  const autosaveQueuedRef = useRef(false)
+
+  /**
+   * Writes the open draft to the encrypted store. Best-effort and silent: the
+   * in-memory snapshot and the resume banner still hold the work if a write
+   * fails or the session has already locked.
+   */
+  const runAutosave = (): Promise<void> => {
+    if (isBlockedRef.current || isFinalizingRef.current) return Promise.resolve()
+    const inFlight = autosavePromiseRef.current
+    if (inFlight) {
+      autosaveQueuedRef.current = true
+      return inFlight
+    }
+    const { draft: latestDraft, minutesText: latestMinutes, stepIndex: latestStep } = latestRef.current
+    // Never rewrite a finished record automatically; only drafts and new sessions autosave.
+    if (existingSession && existingSession.status === 'complete') return Promise.resolve()
+    if (!hasMeaningfulContent(latestDraft, latestMinutes, latestStep)) return Promise.resolve()
+    const promise = (async () => {
+      try {
+        const payload: SessionInput = { ...latestDraft, status: 'draft' }
+        const saved = savedSessionIdRef.current
+          ? await api.replaceSession(savedSessionIdRef.current, payload)
+          : await api.createSession(payload)
+        savedSessionIdRef.current = saved.id
+        setSavedSessionId(saved.id)
+        await refresh()
+        if (!existingSession) replaceHashQuietly(`/log/${saved.id}`)
+      } catch {
+        // Intentionally quiet; see the comment above.
+      } finally {
+        autosavePromiseRef.current = null
+        if (autosaveQueuedRef.current) {
+          autosaveQueuedRef.current = false
+          void runAutosave()
+        }
+      }
+    })()
+    autosavePromiseRef.current = promise
+    return promise
+  }
+  const runAutosaveRef = useRef(runAutosave)
+  runAutosaveRef.current = runAutosave
+
+  // Resolve a draft named in the URL hash once the session list is available.
+  useEffect(() => {
+    if (hasResolvedResume) return
+    if (isLoading) return
+    const fromServer = draftIdFromHash
+      ? sessions.find((session) => session.id === draftIdFromHash && session.status === 'draft')
+      : undefined
+    if (fromServer) setResumeCandidate(snapshotFromSession(fromServer))
+    else replaceHashQuietly('/log')
+    setHasResolvedResume(true)
+  }, [hasResolvedResume, isLoading, sessions, draftIdFromHash])
+
+  // Keep the in-memory snapshot current, so a lock/unlock can pick it up.
+  useEffect(() => {
+    if (!hasResolvedResume || resumeCandidate) return
+    writeEditorDraft({ editorKey, draft, minutesText, stepIndex, savedSessionId, updatedAtMilliseconds: Date.now() })
+  }, [hasResolvedResume, resumeCandidate, editorKey, draft, minutesText, stepIndex, savedSessionId])
+
+  // Debounced autosave to the encrypted store.
+  useEffect(() => {
+    if (!hasResolvedResume || resumeCandidate) return
+    const timer = window.setTimeout(() => void runAutosaveRef.current(), AUTOSAVE_DEBOUNCE_MILLISECONDS)
+    return () => window.clearTimeout(timer)
+  }, [hasResolvedResume, resumeCandidate, draft, minutesText, stepIndex])
+
+  // Flush the draft the moment the page is hidden, so the server copy exists
+  // before the idle lock (which fires while the app is in the background) can
+  // take the session away. This deliberately does not also listen for the lock
+  // event: by then the server session is already gone, and re-running the save
+  // on that event would only bounce the same 401 back.
+  useEffect(() => {
+    const flushWhenHidden = () => {
+      if (document.visibilityState === 'hidden') void runAutosaveRef.current()
+    }
+    document.addEventListener('visibilitychange', flushWhenHidden)
+    return () => document.removeEventListener('visibilitychange', flushWhenHidden)
+  }, [])
+
+  const resumeDraft = () => {
+    if (!resumeCandidate) return
+    setDraft(resumeCandidate.draft)
+    setMinutesText(resumeCandidate.minutesText)
+    setStepIndex(Math.min(resumeCandidate.stepIndex, EDITOR_STEPS.length - 1))
+    setSavedSessionId(resumeCandidate.savedSessionId)
+    setError(null)
+    if (!existingSession && resumeCandidate.savedSessionId) replaceHashQuietly(`/log/${resumeCandidate.savedSessionId}`)
+    setResumeCandidate(null)
+  }
+
+  const startFresh = async () => {
+    if (!resumeCandidate) return
+    clearEditorDraft(editorKey)
+    if (!existingSession && resumeCandidate.savedSessionId) {
+      await api.deleteSession(resumeCandidate.savedSessionId).catch(() => undefined)
+      await refresh().catch(() => undefined)
+    }
+    if (existingSession) {
+      setDraft(toSessionInput(existingSession))
+      setMinutesText(toMinutesText(existingSession.segments))
+      setStepIndex(0)
+      setSavedSessionId(existingSession.id)
+    } else {
+      replaceHashQuietly('/log')
+    }
+    setError(null)
+    setResumeCandidate(null)
+  }
+
+  const cancel = () => navigateTo(existingSession ? `/sessions/${existingSession.id}` : '/sessions')
+
   const save = async (status: SessionStatus) => {
+    isFinalizingRef.current = true
     setIsBusy(true)
     setError(null)
     try {
-      const payload: SessionInput = { ...draft, status }
-      const savedSession = savedSessionId
-        ? await api.replaceSession(savedSessionId, payload)
+      // Let any autosave already in flight land first, so the final write reuses
+      // its row instead of racing it into a duplicate.
+      const inFlight = autosavePromiseRef.current
+      if (inFlight) await inFlight.catch(() => undefined)
+      const payload: SessionInput = { ...latestRef.current.draft, status }
+      const savedSession = savedSessionIdRef.current
+        ? await api.replaceSession(savedSessionIdRef.current, payload)
         : await api.createSession(payload)
+      savedSessionIdRef.current = savedSession.id
       setSavedSessionId(savedSession.id)
+      clearEditorDraft(editorKey)
       await refresh()
       navigateTo(`/sessions/${savedSession.id}`, { replace: true })
     } catch (saveError) {
+      isFinalizingRef.current = false
       setError(saveError instanceof Error ? saveError.message : 'Could not save this session.')
       setIsBusy(false)
     }
@@ -186,14 +413,69 @@ export function SessionEditor({ existingSession }: { existingSession?: Session }
     else void save('complete')
   }
 
+  // Opening a draft named in the hash: hold the form until it resolves.
+  if (!hasResolvedResume) {
+    return (
+      <form className="editor" onSubmit={(event) => event.preventDefault()}>
+        <div className="editor-bar">
+          <button
+            type="button"
+            className="button button-quiet"
+            onClick={cancel}
+          >
+            Cancel
+          </button>
+          <span className="editor-bar-title">{existingSession ? 'Editing session' : 'New session'}</span>
+          <span className="step-count" aria-hidden="true" />
+        </div>
+        <p className="screen-message editor-step">Opening your practice log...</p>
+      </form>
+    )
+  }
+
+  // An unfinished draft: offer to pick it up rather than silently losing it.
+  if (resumeCandidate) {
+    return (
+      <form className="editor" onSubmit={(event) => event.preventDefault()}>
+        <div className="editor-bar">
+          <button
+            type="button"
+            className="button button-quiet"
+            onClick={cancel}
+          >
+            Cancel
+          </button>
+          <span className="editor-bar-title">{existingSession ? 'Editing session' : 'New session'}</span>
+          <span className="step-count" aria-hidden="true" />
+        </div>
+        <div className="editor-step">
+          <section className="resume-banner" aria-labelledby="resume-heading">
+            <h2 id="resume-heading">{existingSession ? 'Unsaved changes' : 'Unfinished session'}</h2>
+            <p>
+              {existingSession
+                ? 'You had edits to this session that were not saved. Pick up where you left off, or discard them and go back to the saved version.'
+                : resumeCandidate.savedSessionId
+                  ? 'You started a session but did not finish it. It was saved encrypted as a draft.'
+                  : 'You started a session but did not finish it.'}
+            </p>
+            <div className="resume-actions">
+              <button type="button" className="button button-primary" onClick={resumeDraft}>
+                {existingSession ? 'Resume editing' : 'Resume'}
+              </button>
+              <button type="button" className="button button-secondary" onClick={() => void startFresh()}>
+                {existingSession ? 'Discard changes' : 'Start fresh'}
+              </button>
+            </div>
+          </section>
+        </div>
+      </form>
+    )
+  }
+
   return (
     <form className="editor" onSubmit={submit}>
       <div className="editor-bar">
-        <button
-          type="button"
-          className="button button-quiet"
-          onClick={() => navigateTo(savedSessionId ? `/sessions/${savedSessionId}` : '/sessions')}
-        >
+        <button type="button" className="button button-quiet" onClick={cancel}>
           Cancel
         </button>
         <span className="editor-bar-title">{existingSession ? 'Editing session' : 'New session'}</span>
