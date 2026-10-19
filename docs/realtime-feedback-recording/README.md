@@ -1,7 +1,20 @@
 # Inline recording, a live vocal monitor, and the SLP report notes fix
 
-Three changes on `feat/realtime-feedback-recording`, captured as before/after pairs.
-All shots are at 390x844 (mobile) or 1280x900 (desktop), light unless labelled dark.
+Three changes on `feat/realtime-feedback-recording`, captured as before/after pairs
+and as short animations. All shots are at 390x844 (mobile) or 1280x900 (desktop),
+light unless labelled dark.
+
+## Demos (animations)
+
+| Demo | What it shows | Size |
+|---|---|---|
+| `demos/vocal-monitor.gif` | Tap **Start**, then the strip tracking a swept tone, then the pad expanding. | 890 KB, 10.7s, 5fps |
+| `demos/inline-recording.gif` | Recording a step, stopping, and the saved clip appearing with a player. | 797 KB, 12s, 5fps |
+| `demos/report-notes.gif` | The report showing the step note, the SLP note, and the recordings list. | 1.4 MB, 6.4s, 12fps |
+
+The animations were recorded from the page with a scripted gesture, and the monitor
+shots use a synthetic tone as the microphone, so the readouts are the real analysis
+core, not a mock.
 
 ## 1. Step notes now reach the SLP report (bug fix)
 
