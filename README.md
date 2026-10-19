@@ -161,10 +161,15 @@ carry a custom header (forcing a CORS preflight that is never granted) and a sam
 traversal surface. Errors never echo request content into logs.
 
 **In the browser.** Decrypted sessions live only in React state. Nothing is written to
-localStorage, IndexedDB, or a service worker cache. The tab locks itself after the idle window
-even if you never touch it, and the page blurs while the app is in the background so
-app-switcher snapshots do not show your sessions. Exports are plaintext by design and are
-logged; CSV cells are neutralized against spreadsheet formula injection.
+localStorage, IndexedDB, or a service worker cache. An unfinished session, though, is not held
+only in the tab: while it is open the editor autosaves it to the encrypted store as a draft,
+debounced as you type and again the moment the page is hidden, so a lock, a reload, or a
+backgrounded tab the phone kills does not lose it. Opening **Log** then offers to resume it.
+The draft's opaque row id rides in the URL hash; no note text, and nothing else, is written to
+browser storage. Drafts never count toward adherence until you complete them. The tab locks
+itself after the idle window even if you never touch it, and the page blurs while the app is in
+the background so app-switcher snapshots do not show your sessions. Exports are plaintext by
+design and are logged; CSV cells are neutralized against spreadsheet formula injection.
 
 **Container.** Runs as the unprivileged `node` user from a read-only root filesystem with all
 capabilities dropped and `no-new-privileges`; the runtime image holds only Node and one bundled
@@ -257,6 +262,8 @@ device:
       rating when you re-rate at the end of a session.
 - [ ] Switching apps blurs the log in the app switcher.
 - [ ] Leaving the app open past the idle window shows the unlock screen.
+- [ ] With a session half-entered, background the app until it locks, then unlock: the **Log**
+      screen offers to resume, and choosing it restores the fields and the step you were on.
 - [ ] The authenticator link opens your authenticator app on iOS.
 - [ ] Password manager offers to fill the passphrase on the unlock screen.
 - [ ] The report prints with the navigation hidden and the session list intact.

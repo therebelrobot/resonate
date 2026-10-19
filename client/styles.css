@@ -393,6 +393,11 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .part-step-summary { font-size: 0.875rem; color: var(--ink-soft); max-width: 40ch; }
 .finish-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
+.resume-banner { display: grid; gap: 12px; margin-top: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); }
+.resume-banner h2 { color: var(--ink-soft); }
+.resume-banner p { color: var(--ink-soft); max-width: 55ch; }
+.resume-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
 .editor-actions {
   position: sticky;
   bottom: 0;
