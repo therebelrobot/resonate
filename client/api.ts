@@ -1,4 +1,24 @@
-import type { AuditEvent, ProtocolDocument, ProtocolDocumentId, Session, SessionInput, Tag, TagInput, VaultStatus } from '../shared/model'
+import type {
+  AuditEvent,
+  ProtocolDocument,
+  ProtocolDocumentId,
+  Recording,
+  SegmentKind,
+  Session,
+  SessionInput,
+  Tag,
+  TagInput,
+  VaultStatus,
+} from '../shared/model'
+
+/** The JSON body for creating a recording; the audio is base64 in this envelope. */
+export interface RecordingUpload {
+  segmentKind: SegmentKind | null
+  label: string
+  mimeType: string
+  durationSeconds: number | null
+  audioBase64: string
+}
 
 export type TagWithUsage = Tag & { usageCount: number }
 
@@ -60,6 +80,14 @@ export const api = {
   replaceSession: (sessionId: string, sessionInput: SessionInput) =>
     request<Session>('PUT', `/api/sessions/${sessionId}`, sessionInput),
   deleteSession: (sessionId: string) => request<{ ok: true }>('DELETE', `/api/sessions/${sessionId}`),
+
+  listRecordings: () => request<Recording[]>('GET', '/api/recordings'),
+  listSessionRecordings: (sessionId: string) => request<Recording[]>('GET', `/api/sessions/${sessionId}/recordings`),
+  createRecording: (sessionId: string, upload: RecordingUpload) =>
+    request<Recording>('POST', `/api/sessions/${sessionId}/recordings`, upload),
+  deleteRecording: (recordingId: string) => request<{ ok: true }>('DELETE', `/api/recordings/${recordingId}`),
+  /** Same-origin URL the browser streams the decrypted audio from (cookie-authenticated). */
+  recordingAudioUrl: (recordingId: string) => `/api/recordings/${encodeURIComponent(recordingId)}/audio`,
 
   listTags: () => request<TagWithUsage[]>('GET', '/api/tags'),
   createTag: (tagInput: TagInput) => request<Tag>('POST', '/api/tags', tagInput),

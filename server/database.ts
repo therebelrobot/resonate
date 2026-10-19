@@ -34,6 +34,18 @@ const MIGRATIONS: string[] = [
      ip_address TEXT NOT NULL,
      user_agent TEXT NOT NULL
    );`,
+  // Inline audio recordings. `payload` is the encrypted metadata; `audio` is the
+  // encrypted audio bytes. Both carry AAD naming this table and the row id, so a
+  // recording's audio cannot be swapped for another's. `session_id` is a plaintext
+  // lookup column (a random id, not content) so a session's recordings can be
+  // listed and deleted without decrypting every row.
+  `CREATE TABLE recordings (
+     id TEXT PRIMARY KEY,
+     session_id TEXT NOT NULL,
+     payload BLOB NOT NULL,
+     audio BLOB NOT NULL
+   );
+   CREATE INDEX recordings_by_session ON recordings (session_id);`,
 ]
 
 export type Database = DatabaseSync

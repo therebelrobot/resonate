@@ -56,6 +56,15 @@ export function formatSeconds(seconds: number | null): string {
   return `${Math.round(seconds)}s`
 }
 
+/** A recording length as a clock value: 0:07, 1:42, 12:05. */
+export function formatClockDuration(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return '-'
+  const totalSeconds = Math.round(seconds)
+  const minutes = Math.floor(totalSeconds / 60)
+  const remainder = totalSeconds % 60
+  return `${minutes}:${String(remainder).padStart(2, '0')}`
+}
+
 export function formatPercent(fraction: number | null, fractionDigits = 0): string {
   if (fraction === null) return '-'
   return `${(fraction * 100).toFixed(fractionDigits)}%`

@@ -9,7 +9,7 @@ import {
 // Plain types shared by the server and the client. Validation lives in
 // server/schemas.ts so the client bundle does not carry the validator.
 
-export { SESSION_ROLES, SESSION_ROLE_LABELS, type SessionRole } from './protocol'
+export { SESSION_ROLES, SESSION_ROLE_LABELS, type SessionRole, type SegmentKind } from './protocol'
 // The ratio and carryover-kind unions are defined in protocol.ts (the stage and
 // carryover-item types there need them) and re-exported here so the spec's
 // `import { ... } from './model'` contract holds.
@@ -187,6 +187,37 @@ export interface Session extends SessionInput {
   id: string
   createdAt: string
   updatedAt: string
+}
+
+/**
+ * A short audio recording captured inline while logging a session. The audio
+ * bytes stay server-side (encrypted at rest); the client only ever sees this
+ * metadata and streams the audio back through an authenticated endpoint.
+ */
+export interface Recording {
+  id: string
+  sessionId: string
+  /** The step the recording belongs to, or null for a session-level recording. */
+  segmentKind: SegmentKind | null
+  /** A short human label, e.g. the step name or "Take 2". */
+  label: string
+  /** The browser's recording MIME type, e.g. "audio/webm;codecs=opus". */
+  mimeType: string
+  /** Duration in seconds, or null when the browser did not report one. */
+  durationSeconds: number | null
+  /** Size of the stored audio in bytes. */
+  byteLength: number
+  createdAt: string
+}
+
+/** Upper bound on one uploaded recording, enforced by the schema and the body limit. */
+export const MAX_RECORDING_BYTES = 20 * 1024 * 1024
+export const MAX_RECORDING_SECONDS = 60 * 60
+
+/** A display label for a recording, falling back to its step when none was given. */
+export function recordingDisplayLabel(recording: Recording): string {
+  if (recording.label.trim() !== '') return recording.label.trim()
+  return recording.segmentKind ? `Step: ${recording.segmentKind}` : 'Recording'
 }
 
 export interface VaultStatus {

@@ -11,6 +11,7 @@ import { VaultError, VaultService } from './vault'
 import { buildOtpauthUri } from './crypto/totp'
 import { countTagOccurrences } from '../shared/metrics'
 import {
+  MAX_RECORDING_BYTES,
   isProtocolDocumentId,
   normalizeSegmentInput,
   type SessionInput,
@@ -23,6 +24,7 @@ import {
   RecordConflictError,
   RecordNotFoundError,
   RecordValidationError,
+  RecordingRepository,
   SessionRepository,
   TagRepository,
   assertSessionTagReferencesAreValid,
@@ -33,6 +35,7 @@ import {
   loginRequestSchema,
   passphraseConfirmationSchema,
   protocolDocumentInputSchema,
+  recordingInputSchema,
   recoverRequestSchema,
   sessionInputSchema,
   setupRequestSchema,
@@ -49,12 +52,18 @@ export const REQUIRED_REQUEST_HEADER = 'x-resonate-request'
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self'",
+  // 'wasm-unsafe-eval' lets the Sonorant analysis core (compiled to WebAssembly)
+  // instantiate. It does not enable JavaScript eval.
+  "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self'",
   "img-src 'self' data:",
   "font-src 'self'",
   "connect-src 'self'",
   "manifest-src 'self'",
+  // Blob URLs are used to preview a recording before it is uploaded.
+  "media-src 'self' blob:",
+  // The analysis pipeline runs in a module Worker emitted by the build.
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'self'",
@@ -82,6 +91,7 @@ export function createApplication(dependencies: ApplicationDependencies) {
   const unlockRateLimiter = new UnlockRateLimiter(currentTimeMilliseconds)
   const tagRepository = new TagRepository(database)
   const sessionRepository = new SessionRepository(database)
+  const recordingRepository = new RecordingRepository(database)
   const protocolDocumentRepository = new ProtocolDocumentRepository(database)
   const auditLog = new AuditLog(database)
 
@@ -172,9 +182,11 @@ export function createApplication(dependencies: ApplicationDependencies) {
     context.header('Referrer-Policy', 'no-referrer')
     context.header('Cross-Origin-Opener-Policy', 'same-origin')
     context.header('Cross-Origin-Resource-Policy', 'same-origin')
+    // microphone=(self): the Sonorant monitor and inline recording both need it,
+    // and only from this origin. Everything else stays off.
     context.header(
       'Permissions-Policy',
-      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+      'camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()',
     )
     context.header('X-Robots-Tag', 'noindex, nofollow, noarchive')
     if (config.cookieSecure) context.header('Strict-Transport-Security', 'max-age=31536000')
@@ -182,7 +194,15 @@ export function createApplication(dependencies: ApplicationDependencies) {
 
   // ---------- API guards ----------
 
-  app.use('/api/*', bodyLimit({ maxSize: 256 * 1024 }))
+  // Most routes take small JSON; a recording upload is the one exception, so it
+  // gets its own (still bounded) limit without widening the limit everywhere.
+  const jsonBodyLimit = bodyLimit({ maxSize: 256 * 1024 })
+  const recordingBodyLimit = bodyLimit({ maxSize: Math.ceil(MAX_RECORDING_BYTES * 1.4) + 4096 })
+  app.use('/api/*', (context, next) => {
+    const isRecordingUpload =
+      context.req.method === 'POST' && /^\/api\/sessions\/[^/]+\/recordings$/.test(context.req.path)
+    return (isRecordingUpload ? recordingBodyLimit : jsonBodyLimit)(context, next)
+  })
 
   app.use('/api/*', async (context, next) => {
     context.header('Cache-Control', 'no-store')
@@ -350,7 +370,59 @@ export function createApplication(dependencies: ApplicationDependencies) {
   })
 
   app.delete('/api/sessions/:sessionId', (context) => {
-    sessionRepository.delete(context.req.param('sessionId'))
+    const sessionId = context.req.param('sessionId')
+    sessionRepository.delete(sessionId)
+    // Recordings belong to their session; deleting the session deletes them too.
+    recordingRepository.deleteForSession(sessionId)
+    return context.json({ ok: true })
+  })
+
+  // Inline recordings. Metadata is JSON; the audio itself is encrypted at rest and
+  // streamed back only through an authenticated, same-origin endpoint.
+  app.get('/api/recordings', (context) => context.json(recordingRepository.listAll(keyOf(context))))
+
+  app.get('/api/sessions/:sessionId/recordings', (context) =>
+    context.json(recordingRepository.listForSession(keyOf(context), context.req.param('sessionId'))),
+  )
+
+  app.post('/api/sessions/:sessionId/recordings', async (context) => {
+    const sessionId = context.req.param('sessionId')
+    // Throws 404 when the session no longer exists.
+    sessionRepository.get(keyOf(context), sessionId)
+    const recordingInput = await readJsonBody(context, recordingInputSchema)
+    const audio = Buffer.from(recordingInput.audioBase64, 'base64')
+    if (audio.byteLength === 0) throw new RecordValidationError('The recording was empty.')
+    if (audio.byteLength > MAX_RECORDING_BYTES) {
+      throw new RecordValidationError('That recording is larger than the limit.')
+    }
+    const recording = recordingRepository.create(
+      keyOf(context),
+      sessionId,
+      {
+        segmentKind: recordingInput.segmentKind,
+        label: recordingInput.label,
+        mimeType: recordingInput.mimeType,
+        durationSeconds: recordingInput.durationSeconds,
+        audio,
+      },
+      nowIso(),
+    )
+    audit(context, 'recording_saved')
+    return context.json(recording, 201)
+  })
+
+  app.get('/api/recordings/:recordingId/audio', (context) => {
+    const { recording, audio } = recordingRepository.getAudio(keyOf(context), context.req.param('recordingId'))
+    audit(context, 'recording_played')
+    context.header('Content-Type', recording.mimeType || 'application/octet-stream')
+    context.header('Content-Length', String(audio.byteLength))
+    // `inline` so <audio> can play it; the filename is only a hint.
+    context.header('Content-Disposition', `inline; filename="resonate-recording-${recording.id}"`)
+    return context.body(new Uint8Array(audio))
+  })
+
+  app.delete('/api/recordings/:recordingId', (context) => {
+    recordingRepository.delete(context.req.param('recordingId'))
     return context.json({ ok: true })
   })
 
@@ -378,6 +450,12 @@ export function createApplication(dependencies: ApplicationDependencies) {
       return context.body(buildSessionsCsv(allSessions, allTags, config.exportTimeZone))
     }
     context.header('Content-Disposition', `attachment; filename="resonate-${dateStamp}.json"`)
+    // Recordings travel with the export so the audio leaves with the session data.
+    // Each carries its bytes as base64; the metadata alone would not be playable.
+    const recordingsWithAudio = recordingRepository.listAll(keyOf(context)).map((recording) => ({
+      ...recording,
+      audioBase64: recordingRepository.getAudio(keyOf(context), recording.id).audio.toString('base64'),
+    }))
     return context.json({
       format: 'resonate-export',
       version: 1,
@@ -385,6 +463,7 @@ export function createApplication(dependencies: ApplicationDependencies) {
       exportTimeZone: config.exportTimeZone,
       tags: allTags,
       sessions: allSessions,
+      recordings: recordingsWithAudio,
       documents: allDocuments,
     })
   })

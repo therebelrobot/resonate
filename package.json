@@ -30,6 +30,8 @@
     "hono": "4.13.13",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "sonorant": "^0.6.5",
+    "sonorant-react": "^0.6.5",
     "zod": "4.6.5"
   },
   "devDependencies": {
