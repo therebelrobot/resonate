@@ -145,6 +145,18 @@ generally expects; column mapping may need adjusting once you see the import scr
 also a server-side CSV under **Settings -> Export** with one row per part of each session,
 which is easier to pivot if you would rather work in a spreadsheet.
 
+**Export one session with its audio.** Open a session from **History** and use the **Export**
+section at the bottom of the page. You get one zip file per session: the session as a report
+for your SLP (`report.pdf`), with every step, measurement, and tag laid out for print, plus
+each of that session's recordings in an `audio/` folder as a plain WAV named for the session,
+the step, and the time it was recorded - `2026-10-20_0930_warmup-note_0934.wav`. Recordings are
+stored compressed (webm/opus, or mp4 in Safari); the browser decodes each one and writes plain
+PCM WAV, which every player and editor opens, at the cost of size. Untick **Include what I
+wrote** to leave the notes out and keep measurements only. The PDF and the audio are plaintext
+once downloaded, so send them deliberately, and the export is recorded in the access log. If a
+clip cannot be decoded on this device, it is included in its original format rather than
+dropped, and the page says so.
+
 The browser-built report and CSV use your device's time zone. The server-built one uses
 `RESONATE_TIMEZONE`, because the stored timestamps are UTC and the container is usually not in
 your zone - which is exactly what makes an evening session land on the wrong day otherwise.
@@ -302,6 +314,8 @@ device:
 - [ ] The report prints with the navigation hidden and the session list intact, and a step note
       typed in the editor appears in the printed report.
 - [ ] CSV export opens correctly in your spreadsheet app.
+- [ ] A session's **Export** downloads one zip holding `report.pdf` and the session's recordings
+      as WAVs named for the session and step, and the PDF opens with every part and note intact.
 - [ ] Recording a step on a brand-new session creates the draft, and the clip is still there
       after a lock and unlock.
 - [ ] The vocal monitor starts on a tap, shows pitch and resonance, and the browser's mic

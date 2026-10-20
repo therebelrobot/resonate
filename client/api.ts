@@ -98,7 +98,8 @@ export const api = {
   saveDocument: (documentId: ProtocolDocumentId, text: string) =>
     request<ProtocolDocument>('PUT', `/api/documents/${documentId}`, { text }),
 
-  recordClientExport: (kind: 'report' | 'session_csv') => request<{ ok: true }>('POST', '/api/audit/client-export', { kind }),
+  recordClientExport: (kind: 'report' | 'session_csv' | 'session_package') =>
+    request<{ ok: true }>('POST', '/api/audit/client-export', { kind }),
   listAuditEvents: () => request<AuditEvent[]>('GET', '/api/audit'),
   changePassphrase: (currentPassphrase: string, newPassphrase: string) =>
     request<{ ok: true }>('POST', '/api/passphrase', { currentPassphrase, newPassphrase }),

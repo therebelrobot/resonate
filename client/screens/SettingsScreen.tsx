@@ -17,6 +17,7 @@ const AUDIT_EVENT_LABELS: Record<string, string> = {
   authenticator_disabled: 'Authenticator turned off',
   report_prepared: 'Report prepared',
   exported_slp_csv: 'Exported the CSV for a clinician',
+  exported_session_package: 'Exported a session report and audio',
   exported_json: 'Exported the JSON archive',
   exported_csv: 'Exported the CSV from the server',
 }

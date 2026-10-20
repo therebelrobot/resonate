@@ -213,5 +213,5 @@ export const totpConfirmRequestSchema = z.object({
 })
 
 export const clientExportAuditSchema = z.object({
-  kind: z.enum(['report', 'session_csv']),
+  kind: z.enum(['report', 'session_csv', 'session_package']),
 })
