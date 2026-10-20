@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api } from '../api'
 import { useSessionData } from '../sessionData'
 import { navigateTo } from '../router'
+import { exportSessionPackage } from '../sessionPackage'
 import { formatClockDuration, formatFullTimestamp, formatMinutes, formatRating, formatSeconds } from '../format'
 import { minutesByTrack, sessionTotalMinutes } from '../../shared/metrics'
 import {
@@ -39,7 +40,46 @@ export function SessionDetailScreen({ session }: { session: Session }) {
   const sessionRecordings = recordingsBySessionId.get(session.id) ?? []
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [includeWrittenText, setIncludeWrittenText] = useState(true)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportProgress, setExportProgress] = useState<string | null>(null)
+  const [exportNotice, setExportNotice] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
   const trackMinutes = minutesByTrack(session)
+
+  const exportPackage = async () => {
+    setIsExporting(true)
+    setExportError(null)
+    setExportNotice(null)
+    setExportProgress(sessionRecordings.length > 0 ? `Preparing 1 of ${sessionRecordings.length}...` : 'Building the report...')
+    try {
+      const result = await exportSessionPackage({
+        session,
+        tagById,
+        recordings: sessionRecordings,
+        includeWrittenText,
+        onProgress: ({ completed, total, label }) => {
+          if (total === 0 || completed >= total) {
+            setExportProgress('Building the report...')
+          } else {
+            setExportProgress(`Converting ${completed + 1} of ${total} (${label})...`)
+          }
+        },
+      })
+      const keptOriginal = result.undecodedCount
+      setExportNotice(
+        `Downloaded ${result.fileName}` +
+          (keptOriginal > 0
+            ? `. ${keptOriginal} recording${keptOriginal === 1 ? '' : 's'} kept in ${keptOriginal === 1 ? 'its' : 'their'} original format because this browser could not convert ${keptOriginal === 1 ? 'it' : 'them'}.`
+            : '.'),
+      )
+    } catch (exportFailure) {
+      setExportError(exportFailure instanceof Error ? exportFailure.message : 'Could not build the export.')
+    } finally {
+      setIsExporting(false)
+      setExportProgress(null)
+    }
+  }
 
   const deleteSession = async () => {
     if (!window.confirm('Delete this session? This cannot be undone.')) return
@@ -170,6 +210,34 @@ export function SessionDetailScreen({ session }: { session: Session }) {
           <p className="detail-text">{session.slpNote}</p>
         </section>
       )}
+
+      <section className="detail-section">
+        <h2>Export</h2>
+        <p className="field-hint">
+          One zip file: this session as a report for your SLP (PDF), plus every recording as a playable WAV named for
+          this session, its step, and the time it was recorded. The files are plaintext once downloaded, so send them
+          deliberately.
+        </p>
+        <label className="checkbox-field">
+          <input
+            type="checkbox"
+            checked={includeWrittenText}
+            disabled={isExporting}
+            onChange={(event) => setIncludeWrittenText(event.target.checked)}
+          />
+          <span>Include what I wrote (step notes and the SLP note)</span>
+        </label>
+        <button type="button" className="button button-primary" onClick={() => void exportPackage()} disabled={isExporting}>
+          {isExporting
+            ? 'Exporting...'
+            : sessionRecordings.length > 0
+              ? `Download report and ${sessionRecordings.length} recording${sessionRecordings.length === 1 ? '' : 's'} (.zip)`
+              : 'Download report (.zip)'}
+        </button>
+        {exportProgress && <p className="field-hint" role="status">{exportProgress}</p>}
+        {exportNotice && <p className="form-ok">{exportNotice}</p>}
+        {exportError && <p className="form-error">{exportError}</p>}
+      </section>
 
       {error && <p className="form-error">{error}</p>}
 

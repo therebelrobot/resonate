@@ -474,7 +474,12 @@ export function createApplication(dependencies: ApplicationDependencies) {
   // Reports and the SLP CSV are assembled in the browser; this only records that one was made.
   app.post('/api/audit/client-export', async (context) => {
     const { kind } = await readJsonBody(context, clientExportAuditSchema)
-    audit(context, kind === 'report' ? 'report_prepared' : 'exported_slp_csv')
+    const auditEventByKind = {
+      report: 'report_prepared',
+      session_csv: 'exported_slp_csv',
+      session_package: 'exported_session_package',
+    } as const
+    audit(context, auditEventByKind[kind])
     return context.json({ ok: true })
   })
 
