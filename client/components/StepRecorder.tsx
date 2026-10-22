@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api'
-import { useAudioCapture } from '../audio/AudioCaptureProvider'
+import { useAudioCapture, type FinishedRecording } from '../audio/AudioCaptureProvider'
 import { formatClockDuration } from '../format'
 import { recordingDisplayLabel, type Recording, type SegmentKind } from '../../shared/model'
 import { SEGMENT_DEFINITIONS } from '../../shared/protocol'
@@ -32,6 +32,11 @@ export interface StepRecorderProps {
   recordings: Recording[]
   /** Called after an upload or delete so the shared session data refreshes. */
   onChanged: () => void
+  /**
+   * Called the moment a take finishes, before it is uploaded, so the step can be
+   * measured while the audio is on its way to the encrypted store.
+   */
+  onRecorded?: (finished: FinishedRecording) => void
 }
 
 /**
@@ -39,7 +44,7 @@ export interface StepRecorderProps {
  * soon as it is stopped and rides along with the session in an export, rather
  * than living only in the tab.
  */
-export function StepRecorder({ kind, sessionId, ensureSessionId, recordings, onChanged }: StepRecorderProps) {
+export function StepRecorder({ kind, sessionId, ensureSessionId, recordings, onChanged, onRecorded }: StepRecorderProps) {
   const capture = useAudioCapture()
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,6 +56,7 @@ export function StepRecorder({ kind, sessionId, ensureSessionId, recordings, onC
   const uploadFinished = async () => {
     const finished = await capture.stopRecording()
     if (!finished) return
+    onRecorded?.(finished)
     setIsUploading(true)
     setError(null)
     try {

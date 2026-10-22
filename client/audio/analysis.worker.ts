@@ -5,6 +5,7 @@
 // and this Worker only moves samples in and frame objects out.
 
 import { decodeFrames, framesView, loadEngine, type Engine } from 'sonorant'
+import { analyzeSamples } from './runAnalysis'
 // Vite emits the package's wasm as a fingerprinted asset and hands us its URL.
 // The loader verifies the file against its recorded SHA-256 before instantiating
 // it, so a swapped artifact fails loudly rather than being trusted.
@@ -29,9 +30,39 @@ interface PcmMessage {
   sampleRate: number
 }
 
-self.addEventListener('message', async (event: MessageEvent<PcmMessage>) => {
+/** A finished clip handed over for one-shot analysis, e.g. a recorded step. */
+interface AnalyzeMessage {
+  type: 'resonate/analyze'
+  requestId: number
+  samples: Float32Array
+  sampleRate: number
+}
+
+type IncomingMessage = PcmMessage | AnalyzeMessage
+
+/** The core is fed in chunks, so one long clip never needs a single huge push. */
+async function analyzeClip(data: AnalyzeMessage): Promise<void> {
+  const activeEngine = await ensureEngine(data.sampleRate)
+  const frames = analyzeSamples(activeEngine, data.samples)
+  self.postMessage({ type: 'resonate/analyzed', requestId: data.requestId, frames })
+}
+
+self.addEventListener('message', async (event: MessageEvent<IncomingMessage>) => {
   const data = event.data
-  if (!data || data.type !== 'resonate/pcm') return
+  if (!data) return
+  if (data.type === 'resonate/analyze') {
+    try {
+      await analyzeClip(data)
+    } catch (error) {
+      self.postMessage({
+        type: 'resonate/error',
+        requestId: data.requestId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+    return
+  }
+  if (data.type !== 'resonate/pcm') return
   try {
     const activeEngine = await ensureEngine(data.sampleRate)
     const frameCount = activeEngine.push(data.samples)

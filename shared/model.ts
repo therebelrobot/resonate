@@ -4,6 +4,7 @@ import {
   type SessionRole,
   type StretchAndFlowCarryoverKind,
   type StretchAndFlowRatio,
+  type StretchAndFlowStage,
 } from './protocol'
 
 // Plain types shared by the server and the client. Validation lives in
@@ -326,6 +327,42 @@ export function createEmptyStretchAndFlowDetail(): StretchAndFlowDetail {
     cuesChecked: [],
     toggledAirOnlyAndVoiced: null,
     carryover: null,
+  }
+}
+
+/**
+ * The change that selects a Stretch and Flow stage. The ratio is derived from the
+ * stage, never picked independently (spec 4.3); the phase number must match it; the
+ * five-step shape is seeded by id and anything already recorded on a shared step is
+ * preserved; a stage whose steps are not printed (Phase 4) keeps what was there
+ * rather than discarding it (N6); and the air-only/voiced toggle is cleared on any
+ * stage but Phase 1 and Phase 2 (ADR-0002).
+ *
+ * Shared by the editor's stage radio and the recording-derived suggestion, so the
+ * two cannot drift apart.
+ */
+export function stretchAndFlowStagePatch(
+  segment: SessionSegmentInput,
+  stage: StretchAndFlowStage,
+): Partial<SessionSegmentInput> {
+  const detail = segment.stretchAndFlow ?? createEmptyStretchAndFlowDetail()
+  const steps: StretchAndFlowStepProgress[] =
+    stage.stepIds.length === 0
+      ? detail.steps
+      : stage.stepIds.map(
+          (stepId) =>
+            detail.steps.find((step) => step.stepId === stepId) ?? { stepId, completed: false, breathCount: null },
+        )
+  const togglesAirOnlyAndVoiced = stage.id === 'phase1' || stage.id === 'phase2'
+  return {
+    phaseNumber: stage.phaseNumber,
+    stretchAndFlow: {
+      ...detail,
+      stageId: stage.id,
+      ratio: stage.ratio,
+      toggledAirOnlyAndVoiced: togglesAirOnlyAndVoiced ? detail.toggledAirOnlyAndVoiced : null,
+      steps,
+    },
   }
 }
 

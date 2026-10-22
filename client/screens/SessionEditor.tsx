@@ -10,9 +10,11 @@ import {
   type EditorDraftSnapshot,
 } from '../editorDraftStore'
 import { IntensitySlider } from '../components/IntensitySlider'
+import { DerivedFields } from '../components/DerivedFields'
 import { StepRecorder } from '../components/StepRecorder'
 import { TagPicker } from '../components/TagPicker'
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '../format'
+import type { FinishedRecording } from '../audio/AudioCaptureProvider'
 import {
   GLIDE_PACES,
   GLIDE_PACE_LABELS,
@@ -27,6 +29,7 @@ import {
   noteNameForHz,
   parseBreathCountInput,
   sortSegmentsByProtocolOrder,
+  stretchAndFlowStagePatch,
   type CarryoverDetail,
   type PitchWorkInput,
   type Recording,
@@ -242,6 +245,17 @@ export function SessionEditor({
   const setMinutes = (kind: SegmentKind, text: string) => {
     setMinutesText((previous) => ({ ...previous, [kind]: text }))
     updateSegment(kind, { seconds: parseMinutesToSeconds(text) })
+  }
+
+  /**
+   * Applies a derived change to a step. Minutes go through `setMinutes` so the
+   * number field and the stored seconds stay in step; everything else is a plain
+   * patch. Used by the recording-derived suggestions.
+   */
+  const applySegmentPatch = (kind: SegmentKind, patch: Partial<SessionSegmentInput>) => {
+    const { seconds, ...rest } = patch
+    if (typeof seconds === 'number') setMinutes(kind, String(Math.round((seconds / 60) * 10) / 10))
+    if (Object.keys(rest).length > 0) updateSegment(kind, rest)
   }
 
   const setTagIds = (tagKind: TagKind, tagIds: string[]) => {
@@ -582,6 +596,8 @@ export function SessionEditor({
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
             recorder={recorderConfig}
+            segment={segmentOf('warmupNote')}
+            onApplyPatch={(patch) => applySegmentPatch('warmupNote', patch)}
           >
             {segmentOf('warmupNote') && (
               <div className="editor-fields">
@@ -620,6 +636,8 @@ export function SessionEditor({
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
             recorder={recorderConfig}
+            segment={segmentOf('glides')}
+            onApplyPatch={(patch) => applySegmentPatch('glides', patch)}
           >
             {segmentOf('glides') && (
               <div className="editor-fields">
@@ -689,6 +707,8 @@ export function SessionEditor({
                 onToggle={toggleSegment}
                 onMinutesChange={setMinutes}
                 recorder={recorderConfig}
+                segment={segmentOf(kind)}
+                onApplyPatch={(patch) => applySegmentPatch(kind, patch)}
               >
                 {segmentOf(kind) && (
                   <div className="editor-fields">
@@ -758,6 +778,8 @@ export function SessionEditor({
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
             recorder={recorderConfig}
+            segment={segmentOf('stretchAndFlow')}
+            onApplyPatch={(patch) => applySegmentPatch('stretchAndFlow', patch)}
           >
             {segmentOf('stretchAndFlow') && (
               <div className="editor-fields">
@@ -791,6 +813,8 @@ export function SessionEditor({
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
             recorder={recorderConfig}
+            segment={segmentOf('resonance')}
+            onApplyPatch={(patch) => applySegmentPatch('resonance', patch)}
           >
             {segmentOf('resonance') && (
               <div className="editor-fields">
@@ -823,6 +847,8 @@ export function SessionEditor({
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
             recorder={recorderConfig}
+            segment={segmentOf('carryover')}
+            onApplyPatch={(patch) => applySegmentPatch('carryover', patch)}
           >
             {segmentOf('carryover') && (
               <div className="editor-fields">
@@ -850,6 +876,8 @@ export function SessionEditor({
             onToggle={toggleSegment}
             onMinutesChange={setMinutes}
             recorder={recorderConfig}
+            segment={segmentOf('endurance')}
+            onApplyPatch={(patch) => applySegmentPatch('endurance', patch)}
           >
             {segmentOf('endurance') && (
               <div className="editor-fields">
@@ -961,12 +989,19 @@ interface PartStepProps {
   onToggle: (kind: SegmentKind, included: boolean) => void
   onMinutesChange: (kind: SegmentKind, text: string) => void
   recorder?: PartRecorderConfig
+  /** The open segment, so a recorded clip can propose values for its fields. */
+  segment?: SessionSegmentInput | undefined
+  /** Applies a derived change to this step. */
+  onApplyPatch?: ((patch: Partial<SessionSegmentInput>) => void) | undefined
   children?: ReactNode
 }
 
 /** Wrapper every protocol part shares: skip toggle, the plan's own wording, minutes. */
-function PartStep({ kind, included, minutesText, onToggle, onMinutesChange, recorder, children }: PartStepProps) {
+function PartStep({ kind, included, minutesText, onToggle, onMinutesChange, recorder, segment, onApplyPatch, children }: PartStepProps) {
   const definition = SEGMENT_DEFINITIONS[kind]
+  // The last take on this step, so the fields it can fill can be offered. Reset
+  // whenever this step is left; the recording itself is already safe in the store.
+  const [recorded, setRecorded] = useState<FinishedRecording | null>(null)
   return (
     <section className="part-step">
       <div className="part-step-header">
@@ -1006,7 +1041,10 @@ function PartStep({ kind, included, minutesText, onToggle, onMinutesChange, reco
             />
           </div>
           {children}
-          {recorder && <StepRecorder kind={kind} {...recorder} />}
+          {recorder && <StepRecorder kind={kind} {...recorder} onRecorded={setRecorded} />}
+          {segment && onApplyPatch && (
+            <DerivedFields kind={kind} segment={segment} recorded={recorded} onApplyPatch={onApplyPatch} />
+          )}
         </>
       ) : (
         <p className="empty-hint">Skipped today.</p>
@@ -1103,32 +1141,10 @@ function StretchAndFlowFields({
   const updateDetail = (patch: Partial<StretchAndFlowDetail>) => onChange({ stretchAndFlow: { ...detail, ...patch } })
 
   const selectStage = (nextStage: StretchAndFlowStage) => {
-    // Ratio is derived from the stage, never picked independently (spec 4.3).
-    // usedTissue is left as recorded: choosing a stage is not an observation
-    // that the tissue was used (spec 3.2 - null when not recorded).
-    // Steps are preserved by id across stages that share the five-step shape.
-    // A stage whose steps are not printed (Phase 4) keeps whatever was already
-    // entered rather than discarding it (N6).
-    const steps =
-      nextStage.stepIds.length === 0
-        ? detail.steps
-        : nextStage.stepIds.map((stepId) => {
-            const existing = detail.steps.find((step) => step.stepId === stepId)
-            return existing ?? { stepId, completed: false, breathCount: null }
-          })
-    // The "Toggle 1 & 2" note belongs to Phase 1 and Phase 2 (ADR-0002); clear
-    // the toggle on any other stage.
-    const togglesAirOnlyAndVoiced = nextStage.id === 'phase1' || nextStage.id === 'phase2'
-    onChange({
-      phaseNumber: nextStage.phaseNumber,
-      stretchAndFlow: {
-        ...detail,
-        stageId: nextStage.id,
-        ratio: nextStage.ratio,
-        toggledAirOnlyAndVoiced: togglesAirOnlyAndVoiced ? detail.toggledAirOnlyAndVoiced : null,
-        steps,
-      },
-    })
+    // The stage change (ratio, phase number, seeded steps, air-only/voiced toggle)
+    // lives in shared/model so the editor's radio and the recording-derived
+    // suggestion cannot drift (spec 4.3, ADR-0002).
+    onChange(stretchAndFlowStagePatch(segment, nextStage))
   }
 
   const setStepProgress = (stepId: string, patch: Partial<StretchAndFlowStepProgress>) => {

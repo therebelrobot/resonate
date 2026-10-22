@@ -115,6 +115,20 @@ releases it. The audio constraints are fixed rather than offered as options:
 AGC, echo cancellation and noise suppression all rewrite the signal, and this app is
 for measuring voice, not for calls.
 
+**Then let the clip fill the form.** Stop a take and the app decodes it on the device
+and measures it with the same Sonorant core the monitor uses, then offers the fields
+the audio can actually speak to: the step's minutes, the glide's high and low note,
+the pace and register shifts, the warm-up repetitions and breaks, the loudest
+sustain, a Stretch and Flow stage from the voiced share, and the softer ratings
+(clarity, breathing coordination, pace, fatigue). Every reading carries the
+confidence it was derived at and a line on how it was measured, and nothing is
+written until you accept it - one at a time, or all the solid ones at once, with the
+weakest guesses behind a disclosure. A clip longer than five minutes is read only for
+its length, so an hour of endurance reading never has to be decoded. Same rule as
+everything else measured here: no acoustic maths outside the core, and no value
+without a confidence. See
+[`docs/specs/adr-0005-recording-derived-step-fields.md`](docs/specs/adr-0005-recording-derived-step-fields.md).
+
 **Watch your pitch and resonance anywhere.** The sticky **vocal monitor** sits on
 every screen. Tap **Start** and the microphone feeds [Sonorant](https://github.com/therebelrobot/sonorant)'s
 analysis core (compiled to WebAssembly) through an AudioWorklet and a Worker. The
@@ -318,6 +332,8 @@ device:
       as WAVs named for the session and step, and the PDF opens with every part and note intact.
 - [ ] Recording a step on a brand-new session creates the draft, and the clip is still there
       after a lock and unlock.
+- [ ] Stopping a step recording offers the fields it can read from the clip, and accepting
+      a reading (or all of them) fills the form without touching the numbers by hand.
 - [ ] The vocal monitor starts on a tap, shows pitch and resonance, and the browser's mic
       indicator goes away when you tap **Stop** or lock the app.
 - [ ] A saved recording plays back on the session screen over HTTPS.
