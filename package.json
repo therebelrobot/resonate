@@ -32,7 +32,7 @@
     "react-dom": "19.3.0",
     "sonorant": "*",
     "sonorant-react": "*",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
